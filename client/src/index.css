@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f5f0e8;
+  --page: #faf7f1;
+  --ink: #1a1208;
+  --ink2: #4a3f2f;
+  --ink3: #7a6a52;
+  --rule: rgba(90, 70, 40, 0.15);
+  --accent: #6b3a1f;
+  --highlight: rgba(180, 120, 40, 0.13);
+  --font-head: "IM Fell English SC", serif;
+  --font-body: "Crimson Pro", Georgia, serif;
+  --r: 4px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 18px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  min-height: 100vh;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
