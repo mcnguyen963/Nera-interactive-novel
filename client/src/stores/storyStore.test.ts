@@ -7,6 +7,8 @@ vi.mock('idb-keyval', () => ({
   set: vi.fn(async (key: string, val: unknown) => { memMap.set(key, val) }),
 }))
 
+import { get } from 'idb-keyval'
+
 vi.mock('firebase/firestore', async (importOriginal) => {
   const actual = await importOriginal() as any
   return {
@@ -204,6 +206,72 @@ describe('storyStore', () => {
     it('lists cloud stories', async () => {
       const stories = await useStoryStore.getState().listCloudStories('u')
       expect(Array.isArray(stories)).toBe(true)
+    })
+  })
+
+  describe('drafts', () => {
+    it('createDraft stores a draft', async () => {
+      const id = useStoryStore.getState().createStory({
+        title: 'My Story', subtitle: '', scenarioId: 's', scenario: mockScenario, userId: 'u',
+      })
+      const { story, chapters } = useStoryStore.getState()
+      await useStoryStore.getState().createDraft(id, story!, chapters)
+      const drafts: any[] = (await get('nera-drafts')) || []
+      const draft = drafts.find((d: any) => d.id === id)
+      expect(draft).toBeDefined()
+      expect(draft!.story.title).toBe('My Story')
+      expect(draft!.story.id).toBe(id)
+    })
+
+    it('syncDraft updates existing draft', async () => {
+      const id = useStoryStore.getState().createStory({
+        title: 'My Story', subtitle: '', scenarioId: 's', scenario: mockScenario, userId: 'u',
+      })
+      const { story, chapters } = useStoryStore.getState()
+      await useStoryStore.getState().createDraft(id, story!, chapters)
+      useStoryStore.getState().addParagraph(0, 'A new paragraph.', 'narrator')
+      await useStoryStore.getState().syncDraft()
+      const drafts: any[] = (await get('nera-drafts')) || []
+      const draft = drafts.find((d: any) => d.id === id)
+      expect(draft!.chapters[0].paragraphs).toHaveLength(1)
+      expect(draft!.chapters[0].paragraphs[0].text).toBe('A new paragraph.')
+    })
+
+    it('loadDrafts returns all drafts', async () => {
+      const id = useStoryStore.getState().createStory({
+        title: 'S1', subtitle: '', scenarioId: 's', scenario: mockScenario, userId: 'u',
+      })
+      const { story, chapters } = useStoryStore.getState()
+      await useStoryStore.getState().createDraft(id, story!, chapters)
+      const drafts = await useStoryStore.getState().loadDrafts()
+      expect(drafts).toHaveLength(1)
+      expect(drafts[0].story.title).toBe('S1')
+    })
+
+    it('restoreDraft sets store state and preserves draft', async () => {
+      const id = useStoryStore.getState().createStory({
+        title: 'S1', subtitle: '', scenarioId: 's', scenario: mockScenario, userId: 'u',
+      })
+      const { story, chapters } = useStoryStore.getState()
+      await useStoryStore.getState().createDraft(id, story!, chapters)
+      useStoryStore.getState().resetStory()
+      const ok = await useStoryStore.getState().restoreDraft(id)
+      expect(ok).toBe(true)
+      expect(useStoryStore.getState().story?.title).toBe('S1')
+      const drafts = await useStoryStore.getState().loadDrafts()
+      expect(drafts.find((d: any) => d.id === id)).toBeDefined()
+      expect(drafts.find((d: any) => d.id === id)!.story.title).toBe('S1')
+    })
+
+    it('removeDraft removes a draft', async () => {
+      const id = useStoryStore.getState().createStory({
+        title: 'S1', subtitle: '', scenarioId: 's', scenario: mockScenario, userId: 'u',
+      })
+      const { story, chapters } = useStoryStore.getState()
+      await useStoryStore.getState().createDraft(id, story!, chapters)
+      await useStoryStore.getState().removeDraft(id)
+      const drafts = await useStoryStore.getState().loadDrafts()
+      expect(drafts).toHaveLength(0)
     })
   })
 })

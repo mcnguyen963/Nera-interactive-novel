@@ -34,6 +34,7 @@ export interface FirestoreChapter {
     text: string;
     role: 'narrator' | 'player';
     images: string[];
+    imageDescriptions: string[];
     order: number;
   }[];
 }

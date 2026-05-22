@@ -21,7 +21,7 @@ describe('settingsStore', () => {
       expect(llm.provider).toBe('openrouter')
       expect(llm.temperature).toBe(0.9)
       expect(llm.maxTokens).toBe(1500)
-      expect(llm.contextWindow).toBe(3000)
+      expect(llm.contextWindow).toBe(70000)
       expect(llm.systemPrompt).toBeTruthy()
     })
 

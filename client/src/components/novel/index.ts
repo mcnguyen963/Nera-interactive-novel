@@ -1,4 +1,5 @@
 export { ChapterDivider } from './ChapterDivider'
 export { ParagraphBlock } from './ParagraphBlock'
 export { SettingsModal } from './SettingsModal'
+export { DraftCard } from './DraftCard'
 export { ImageModal } from './ImageModal'

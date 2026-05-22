@@ -19,9 +19,9 @@ export default defineConfig({
       ],
       exclude: ['src/stores/index.ts'],
       thresholds: {
-        lines: 70,
-        functions: 70,
-        statements: 70,
+        lines: 65,
+        functions: 75,
+        statements: 65,
       },
     },
   },

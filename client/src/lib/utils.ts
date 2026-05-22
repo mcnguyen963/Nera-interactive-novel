@@ -6,12 +6,20 @@ export function timestamp(): number {
   return Date.now()
 }
 
+const TOKEN_CHAR_ESTIMATE = 4
+
 export function buildKVContext(
   scenario: { setting: string; companion: string; player: string; hook: string },
   recentParagraphs: { text: string }[],
-  maxChars: number = 3000,
+  maxTokens: number = 3000,
 ): string {
-  const recentText = recentParagraphs.map(p => p.text).join('\n').slice(-maxChars)
+  const maxChars = maxTokens * TOKEN_CHAR_ESTIMATE
+  let recentText = ''
+  for (let i = recentParagraphs.length - 1; i >= 0; i--) {
+    const candidate = recentParagraphs[i].text + '\n' + recentText
+    if (candidate.length > maxChars) break
+    recentText = candidate
+  }
   const kv: Record<string, string> = {
     'Story World': scenario.setting,
     'Companion/NPC': scenario.companion,

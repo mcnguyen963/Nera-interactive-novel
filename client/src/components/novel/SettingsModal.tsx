@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useSettingsStore, useUiStore } from '../../stores'
-import { fetchModels as fetchEdgeModels } from '../../lib/edgeApi'
+import { fetchModels as fetchEdgeModels, testConnection } from '../../lib/edgeApi'
 import { Modal, Button } from '../shared'
 
 export function SettingsModal() {
-  const { llm, image, setLlm, setImage } = useSettingsStore()
+  const { llm, image, backup, setLlm, setImage, setBackup } = useSettingsStore()
   const { showSettings, closeSettings } = useUiStore()
   const [models, setModels] = useState<{ id: string; pricing?: { prompt: string } }[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
@@ -24,15 +24,11 @@ export function SettingsModal() {
 
   async function handleTestConnection() {
     setTestResult('testing')
-    try {
-      const res = await fetch(llm.provider === 'openrouter' ? 'https://openrouter.ai/api/v1/models' : llm.localUrl + '/v1/models', {
-        headers: llm.apiKey ? { Authorization: 'Bearer ' + llm.apiKey } : {},
-        signal: AbortSignal.timeout(8000),
-      })
-      setTestResult(res.ok ? 'ok' : 'fail')
-    } catch {
-      setTestResult('fail')
-    }
+    const ok = await testConnection(
+      llm.provider === 'openrouter' ? 'https://openrouter.ai/api/v1/models' : llm.localUrl,
+      llm.apiKey,
+    )
+    setTestResult(ok ? 'ok' : 'fail')
   }
 
   if (!showSettings) return null
@@ -229,6 +225,45 @@ export function SettingsModal() {
           className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
         />
       </div>
+
+      <div className="flex flex-col gap-1.5 mt-2">
+        <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">
+          ComfyUI Workflow JSON (API format)
+          <span className="font-normal opacity-70 ml-1">— paste from ComfyUI "Save (API Format)"</span>
+        </label>
+        <textarea
+          value={image.comfyWorkflow}
+          onChange={(e) => setImage({ comfyWorkflow: e.target.value })}
+          rows={4}
+          placeholder='{"3": {"class_type": "KSampler", ...}}'
+          className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none resize-y min-h-[60px] leading-[1.55] font-mono focus:border-[var(--accent)]"
+        />
+      </div>
+
+      <hr className="border-[var(--rule)] my-4" />
+      <div className="font-[var(--font-head)] text-[0.78rem] tracking-[0.12em] text-[var(--ink3)] mb-2">
+        Cloud Backup
+      </div>
+
+      <label className="flex items-center gap-2.5 py-1.5 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={backup.cloudTextBackup}
+          onChange={(e) => setBackup({ cloudTextBackup: e.target.checked })}
+          className="accent-[var(--accent)]"
+        />
+        <span className="text-[0.85rem] text-[var(--ink2)]">Back up novel text to cloud (Firestore)</span>
+      </label>
+
+      <label className="flex items-center gap-2.5 py-1.5 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={backup.cloudImageBackup}
+          onChange={(e) => setBackup({ cloudImageBackup: e.target.checked })}
+          className="accent-[var(--accent)]"
+        />
+        <span className="text-[0.85rem] text-[var(--ink2)]">Back up images to cloud (Firebase Storage)</span>
+      </label>
 
       <div className="flex gap-2 justify-end mt-4 pt-1">
         <Button onClick={handleTestConnection}>

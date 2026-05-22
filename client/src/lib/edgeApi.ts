@@ -25,6 +25,7 @@ export async function streamLlmChat(
     model: string
     temperature: number
     maxTokens: number
+    localUrl?: string
   },
   onChunk: (text: string) => void,
   signal?: AbortSignal,
@@ -83,6 +84,34 @@ export async function fetchModels(): Promise<{ id: string; pricing?: { prompt: s
   return data.data || []
 }
 
-export async function generateImage(prompt: string, provider: string, model: string): Promise<Response> {
-  return edgeFetch('/api/llm/image', { prompt, provider, model })
+export async function generateImage(prompt: string, provider: string, model: string, llmUrl?: string, llmModel?: string, imageUrl?: string, comfyWorkflow?: string): Promise<Response> {
+  return edgeFetch('/api/llm/image', { prompt, provider, model, llmUrl, llmModel, imageUrl, comfyWorkflow })
+}
+
+export async function saveStory(storyId: string, data: unknown): Promise<Response> {
+  return edgeFetch('/api/llm/stories/save', { storyId, data })
+}
+
+export async function loadStory(storyId: string): Promise<Response> {
+  return edgeFetch('/api/llm/stories/load', { storyId })
+}
+
+export async function listStories(): Promise<Response> {
+  return edgeFetch('/api/llm/stories/list', {})
+}
+
+export async function deleteStory(storyId: string): Promise<Response> {
+  return edgeFetch('/api/llm/stories/delete', { storyId })
+}
+
+export async function testConnection(url: string, apiKey?: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, {
+      headers: apiKey ? { Authorization: 'Bearer ' + apiKey } : {},
+      signal: AbortSignal.timeout(8000),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
 }

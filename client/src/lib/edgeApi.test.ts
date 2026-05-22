@@ -6,7 +6,7 @@ const firebaseMock = vi.hoisted(() => ({
 
 vi.mock('../lib/firebase', () => firebaseMock)
 
-import { streamLlmChat, fetchModels, generateImage } from './edgeApi'
+import { streamLlmChat, fetchModels, generateImage, testConnection } from './edgeApi'
 
 describe('edgeApi', () => {
   beforeEach(() => {
@@ -88,12 +88,42 @@ describe('edgeApi', () => {
     })
   })
 
+  describe('testConnection', () => {
+    it('returns true when fetch succeeds', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async () => new Response(null, { status: 200 }))
+      await expect(testConnection('http://localhost:8080')).resolves.toBe(true)
+    })
+
+    it('returns false when fetch returns non-ok', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async () => new Response(null, { status: 500 }))
+      await expect(testConnection('http://localhost:8080')).resolves.toBe(false)
+    })
+
+    it('returns false on network error', async () => {
+      vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network error'))
+      await expect(testConnection('http://localhost:8080')).resolves.toBe(false)
+    })
+
+    it('sends authorization header when apiKey provided', async () => {
+      let actualUrl = ''
+      let actualAuth = ''
+      vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async (input: RequestInfo | URL, init?: RequestInit) => {
+        actualUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+        actualAuth = ((init?.headers || {}) as Record<string, string>)['Authorization'] || ''
+        return new Response(null, { status: 200 })
+      })
+      await testConnection('http://localhost:8080', 'sk-test')
+      expect(actualUrl).toBe('http://localhost:8080')
+      expect(actualAuth).toBe('Bearer sk-test')
+    })
+  })
+
   describe('generateImage', () => {
     it('sends POST to image endpoint', async () => {
-      vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async (url: string, opts: any) => {
-        expect(url).toBe('/api/llm/image')
-        expect(opts.method).toBe('POST')
-        const body = JSON.parse(opts.body)
+      vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(input).toBe('/api/llm/image')
+        expect(init?.method).toBe('POST')
+        const body = JSON.parse(init?.body as string)
         expect(body.prompt).toBe('a cat')
         expect(body.provider).toBe('cloud')
         expect(body.model).toBe('flux')

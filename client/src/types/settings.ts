@@ -20,4 +20,10 @@ export interface ImageSettings {
   cloudApiKey: string;
   model: string;
   corsProxyUrl: string;
+  comfyWorkflow: string;
+}
+
+export interface BackupSettings {
+  cloudTextBackup: boolean;
+  cloudImageBackup: boolean;
 }

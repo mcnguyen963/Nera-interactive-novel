@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { SCENARIOS } from '../scenarios'
 import { useAuthStore, useStoryStore } from '../stores'
 import { Button } from '../components/shared'
-import type { ScenarioDef } from '../types/story'
+import { DraftCard } from '../components/novel'
+import type { ScenarioDef, Draft } from '../types/story'
 
 export function HomePage() {
   const [selected, setSelected] = useState<ScenarioDef | null>(null)
@@ -11,7 +13,13 @@ export function HomePage() {
   const [userRole, setUserRole] = useState('')
   const [userHook, setUserHook] = useState('')
   const { user } = useAuthStore()
-  const { createStory } = useStoryStore()
+  const navigate = useNavigate()
+  const { createStory, restoreDraft, saveToCloud, removeDraft, loadDrafts } = useStoryStore()
+  const [drafts, setDrafts] = useState<Draft[]>([])
+
+  useEffect(() => {
+    loadDrafts().then(setDrafts)
+  }, [loadDrafts])
 
   function handleSelect(s: ScenarioDef) {
     setSelected(s)
@@ -38,6 +46,25 @@ export function HomePage() {
     })
   }
 
+  async function handleContinue(draftId: string) {
+    const ok = await restoreDraft(draftId)
+    if (ok) navigate('/novel')
+  }
+
+  async function handleSaveToCloud(_draftId: string) {
+    if (!user) return
+    try {
+      await saveToCloud(user.uid)
+    } catch {
+      // silent
+    }
+  }
+
+  async function handleDeleteDraft(draftId: string) {
+    await removeDraft(draftId)
+    setDrafts((prev) => prev.filter((d) => d.id !== draftId))
+  }
+
   return (
     <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-start p-8 overflow-y-auto">
       <h1 className="font-[var(--font-head)] text-[1.6rem] tracking-[0.15em] text-[var(--accent)] mb-1.5">
@@ -47,28 +74,50 @@ export function HomePage() {
         Choose your world · then craft your setting
       </p>
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3.5 w-full max-w-[800px]">
-        {SCENARIOS.map((s) => (
-          <div
-            key={s.id}
-            className={`bg-[var(--page)] border border-[var(--rule)] rounded-md p-[18px] cursor-pointer transition-all duration-180 hover:border-[var(--accent)] hover:-translate-y-0.5 ${
-              selected?.id === s.id ? 'border-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]' : ''
-            }`}
-            onClick={() => handleSelect(s)}
-          >
-            <h3 className="font-[var(--font-head)] text-[0.9rem] text-[var(--ink)] mb-1.5 tracking-[0.05em]">
-              {s.title}
-            </h3>
-            <p className="text-[0.83rem] text-[var(--ink2)] leading-[1.5]">{s.sub}</p>
-            <span className="inline-block mt-2.5 font-[var(--font-head)] text-[0.65rem] tracking-[0.15em] text-[var(--accent)] opacity-80">
-              {s.tag}
-            </span>
-          </div>
-        ))}
+      <div className="w-full max-w-[800px] mb-8">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 w-full">
+          {SCENARIOS.map((s) => (
+            <div
+              key={s.id}
+              className={`bg-[var(--page)] border border-[var(--rule)] rounded-md p-6 cursor-pointer transition-all duration-180 hover:border-[var(--accent)] hover:-translate-y-0.5 ${
+                selected?.id === s.id ? 'border-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]' : ''
+              }`}
+              onClick={() => handleSelect(s)}
+            >
+              <h3 className="font-[var(--font-head)] text-[0.9rem] text-[var(--ink)] mb-2 tracking-[0.05em]">
+                {s.title}
+              </h3>
+              <p className="text-[0.83rem] text-[var(--ink2)] leading-[1.6]">{s.sub}</p>
+              <span className="inline-block mt-3 font-[var(--font-head)] text-[0.65rem] tracking-[0.15em] text-[var(--accent)] opacity-80">
+                {s.tag}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
+      {drafts.length > 0 && (
+        <div className="w-full max-w-[800px] mb-8">
+          <hr className="border-[var(--rule)] mb-6" />
+          <h2 className="font-[var(--font-head)] text-[1rem] tracking-[0.12em] text-[var(--accent)] mb-4">
+            Your Stories
+          </h2>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+            {drafts.map((d) => (
+              <DraftCard
+                key={d.id}
+                draft={d}
+                onContinue={handleContinue}
+                onSaveToCloud={handleSaveToCloud}
+                onDelete={handleDeleteDraft}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {selected && (
-        <div className="w-full max-w-[800px] mt-5 bg-[var(--page)] border border-[var(--rule)] rounded-md p-5">
+        <div className="w-full max-w-[800px] mt-6 bg-[var(--page)] border border-[var(--rule)] rounded-md p-6">
           <div className="flex flex-col gap-1.5 mb-3.5">
             <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">
               Your Story Setting

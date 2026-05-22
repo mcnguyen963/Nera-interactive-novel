@@ -59,12 +59,12 @@ describe('buildKVContext', () => {
     expect(result).not.toContain('[Recent Events]')
   })
 
-  it('truncates recent paragraphs to maxChars', () => {
+  it('truncates recent paragraphs to maxTokens * 4 chars', () => {
     const long = 'a'.repeat(500)
     const result = buildKVContext(scenario, [{ text: long }, { text: long }], 200)
     const recentIdx = result.indexOf('[Recent Events]')
     const recentText = result.slice(recentIdx)
-    expect(recentText.length).toBeLessThanOrEqual(200 + '[Recent Events]\n'.length)
+    expect(recentText.length).toBeLessThanOrEqual(200 * 4 + '[Recent Events]\n'.length)
   })
 
   it('handles empty paragraph array', () => {

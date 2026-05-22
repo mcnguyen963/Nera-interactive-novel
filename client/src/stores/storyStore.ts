@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { get, set } from 'idb-keyval'
+import { get as idbGet, set as idbSet } from 'idb-keyval'
 import {
   doc,
   getDoc,
@@ -11,21 +11,25 @@ import {
   query,
   orderBy,
 } from 'firebase/firestore'
-import { db } from '../lib/firebase'
-import { generateId, timestamp } from '../lib/utils'
-import type { Story, Chapter, Paragraph, Scenario } from '../types/story'
+import { ref, uploadString, getDownloadURL } from 'firebase/storage'
+import { db, storage } from '../lib/firebase'
+import { generateId, timestamp, buildKVContext } from '../lib/utils'
+import { streamLlmChat, saveStory as apiSaveStory, loadStory as apiLoadStory, listStories as apiListStories } from '../lib/edgeApi'
+import type { Story, Chapter, Paragraph, Scenario, Draft } from '../types/story'
 import type { FirestoreStory, FirestoreChapter } from '../types/firebase'
+
+const DRAFTS_KEY = 'nera-drafts'
 
 const idbStorage = {
   getItem: async (name: string) => {
-    const val = await get(name)
+    const val = await idbGet(name)
     return val !== undefined ? val : null
   },
   setItem: async (name: string, value: unknown): Promise<void> => {
-    await set(name, value)
+    await idbSet(name, value)
   },
   removeItem: async (name: string): Promise<void> => {
-    await set(name, undefined)
+    await idbSet(name, undefined)
   },
 }
 
@@ -35,6 +39,7 @@ interface StoryState {
   activeChapterIndex: number
   isGenerating: boolean
   isSyncing: boolean
+  regeneratingParagraphId: string | null
 
   createStory: (params: {
     title: string
@@ -49,10 +54,20 @@ interface StoryState {
   addParagraph: (chapterIndex: number, text: string, role: 'narrator' | 'player') => Paragraph
   updateParagraph: (chapterIndex: number, paragraphIndex: number, text: string) => void
   deleteParagraph: (chapterIndex: number, paragraphIndex: number) => void
-  addImageToParagraph: (chapterIndex: number, paragraphIndex: number, imageUrl: string) => void
+  addImageToParagraph: (chapterIndex: number, paragraphIndex: number, imageUrl: string, imageDescription?: string) => void
+  regenerateParagraph: (chapterIndex: number, paragraphIndex: number) => Promise<void>
   setGenerating: (val: boolean) => void
   resetStory: () => void
 
+  saveToLocal: () => Promise<boolean>
+  loadFromLocal: (storyId: string) => Promise<boolean>
+  listLocalStories: () => Promise<string[]>
+
+  createDraft: (id: string, story: Story, chapters: Chapter[]) => Promise<void>
+  syncDraft: () => Promise<void>
+  loadDrafts: () => Promise<Draft[]>
+  restoreDraft: (draftId: string) => Promise<boolean>
+  removeDraft: (draftId: string) => Promise<void>
   saveToCloud: (userId: string) => Promise<void>
   loadFromCloud: (storyId: string, userId: string) => Promise<void>
   deleteFromCloud: (storyId: string) => Promise<void>
@@ -67,6 +82,7 @@ export const useStoryStore = create<StoryState>()(
       activeChapterIndex: 0,
       isGenerating: false,
       isSyncing: false,
+      regeneratingParagraphId: null,
 
       createStory: ({ title, subtitle, scenarioId, scenario, userId }) => {
         const id = generateId()
@@ -90,13 +106,17 @@ export const useStoryStore = create<StoryState>()(
           paragraphs: [],
         }
         set({ story, chapters: [firstChapter], activeChapterIndex: 0 })
+        get().syncDraft()
         return id
       },
 
       updateStory: (partial) =>
         set((s) => (s.story ? { story: { ...s.story, ...partial, updatedAt: timestamp() } } : s)),
 
-      setActiveChapter: (index) => set({ activeChapterIndex: index }),
+      setActiveChapter: (index) => {
+        set({ activeChapterIndex: index })
+        get().syncDraft()
+      },
 
       addChapter: () => {
         const { chapters } = get()
@@ -112,6 +132,7 @@ export const useStoryStore = create<StoryState>()(
           paragraphs: [],
         }
         set({ chapters: [...chapters, chapter], activeChapterIndex: chapters.length })
+        get().syncDraft()
       },
 
       addParagraph: (chapterIndex, text, role) => {
@@ -121,6 +142,7 @@ export const useStoryStore = create<StoryState>()(
           text,
           role,
           images: [],
+          imageDescriptions: [],
           order: chapters[chapterIndex].paragraphs.length,
         }
         const updated = chapters.map((ch, i) =>
@@ -129,6 +151,7 @@ export const useStoryStore = create<StoryState>()(
             : ch,
         )
         set({ chapters: updated, story: story ? { ...story, updatedAt: timestamp() } : null })
+        get().syncDraft()
         return para
       },
 
@@ -144,6 +167,7 @@ export const useStoryStore = create<StoryState>()(
             : ch,
         )
         set({ chapters: updated })
+        get().syncDraft()
       },
 
       deleteParagraph: (chapterIndex, paragraphIndex) => {
@@ -154,16 +178,23 @@ export const useStoryStore = create<StoryState>()(
             : ch,
         )
         set({ chapters: updated })
+        get().syncDraft()
       },
 
-      addImageToParagraph: (chapterIndex, paragraphIndex, imageUrl) => {
+      addImageToParagraph: (chapterIndex, paragraphIndex, imageUrl, imageDescription) => {
         const { chapters } = get()
         const updated = chapters.map((ch, ci) =>
           ci === chapterIndex
             ? {
                 ...ch,
                 paragraphs: ch.paragraphs.map((p, pi) =>
-                  pi === paragraphIndex ? { ...p, images: [...p.images, imageUrl] } : p,
+                  pi === paragraphIndex
+                    ? {
+                        ...p,
+                        images: [...(p.images || []), imageUrl],
+                        imageDescriptions: [...(p.imageDescriptions || []), imageDescription || ''],
+                      }
+                    : p,
                 ),
               }
             : ch,
@@ -173,41 +204,213 @@ export const useStoryStore = create<StoryState>()(
 
       setGenerating: (val) => set({ isGenerating: val }),
 
+      createDraft: async (id, story, chapters) => {
+        const { activeChapterIndex } = get()
+        const draft: Draft = { id, story, chapters, activeChapterIndex, savedAt: timestamp() }
+        const existing: Draft[] = (await idbGet(DRAFTS_KEY)) || []
+        const idx = existing.findIndex((d) => d.id === id)
+        if (idx >= 0) {
+          existing[idx] = draft
+        } else {
+          existing.unshift(draft)
+          if (existing.length > 20) existing.pop()
+        }
+        await idbSet(DRAFTS_KEY, existing)
+      },
+
+      syncDraft: async () => {
+        try {
+          const { story, chapters, activeChapterIndex } = get()
+          if (!story) return
+          const existing: Draft[] = (await idbGet(DRAFTS_KEY)) || []
+          const idx = existing.findIndex((d) => d.id === story.id)
+          const draft: Draft = { id: story.id, story, chapters, activeChapterIndex, savedAt: timestamp() }
+          if (idx >= 0) {
+            existing[idx] = draft
+          } else {
+            existing.unshift(draft)
+            if (existing.length > 20) existing.pop()
+          }
+          await idbSet(DRAFTS_KEY, existing)
+        } catch {
+          // fire-and-forget: silently ignore IndexedDB errors
+        }
+      },
+
+      loadDrafts: async () => {
+        try {
+          return (await idbGet(DRAFTS_KEY)) || []
+        } catch {
+          return []
+        }
+      },
+
+      restoreDraft: async (draftId) => {
+        try {
+          const existing: Draft[] = (await idbGet(DRAFTS_KEY)) || []
+          const draft = existing.find((d) => d.id === draftId)
+          if (!draft) return false
+          set({
+            story: draft.story,
+            chapters: draft.chapters,
+            activeChapterIndex: draft.activeChapterIndex,
+          })
+          return true
+        } catch {
+          return false
+        }
+      },
+
+      removeDraft: async (draftId) => {
+        try {
+          const existing: Draft[] = (await idbGet(DRAFTS_KEY)) || []
+          await idbSet(DRAFTS_KEY, existing.filter((d) => d.id !== draftId))
+        } catch {
+          // fire-and-forget
+        }
+      },
+
+      regenerateParagraph: async (chapterIndex, paragraphIndex) => {
+        const { story, chapters, regeneratingParagraphId } = get()
+        const para = chapters[chapterIndex]?.paragraphs[paragraphIndex]
+        if (!story || !para || regeneratingParagraphId) return
+
+        set({ regeneratingParagraphId: para.id })
+
+        const allParas = chapters.flatMap((c) => c.paragraphs)
+        const before = allParas.slice(0, allParas.indexOf(para))
+
+        const { useSettingsStore } = await import('../stores/settingsStore')
+        const llm = useSettingsStore.getState().llm
+        const ctx = buildKVContext(story.scenario, before, llm.contextWindow)
+
+        try {
+          const systemPrompt = llm.systemPrompt + '\n\n## Story Context (Key-Value)\n' + ctx
+          const messages = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Rewrite the following paragraph of the story in a different way, keeping the same meaning and style:\n\n${para.text}` },
+          ]
+
+          let fullText = ''
+          await streamLlmChat(
+            {
+              messages,
+              provider: llm.provider,
+              model: llm.provider === 'openrouter' ? llm.openrouterModel : llm.localModel,
+              temperature: llm.temperature,
+              maxTokens: llm.maxTokens,
+              localUrl: llm.localUrl,
+            },
+            (chunk) => {
+              fullText += chunk
+              const store = useStoryStore.getState()
+              store.updateParagraph(chapterIndex, paragraphIndex, fullText)
+            },
+          )
+
+          const store = useStoryStore.getState()
+          store.updateParagraph(chapterIndex, paragraphIndex, fullText.trim())
+        } catch {
+          // regeneration failed — keep original text
+        } finally {
+          set({ regeneratingParagraphId: null })
+        }
+      },
+
       resetStory: () => set({ story: null, chapters: [], activeChapterIndex: 0 }),
+
+      saveToLocal: async () => {
+        const { story, chapters } = get()
+        if (!story) return false
+        try {
+          const res = await apiSaveStory(story.id, { story, chapters })
+          return res.ok
+        } catch {
+          return false
+        }
+      },
+
+      loadFromLocal: async (storyId) => {
+        try {
+          const res = await apiLoadStory(storyId)
+          if (!res.ok) return false
+          const data = await res.json()
+          set({
+            story: data.story,
+            chapters: data.chapters || [],
+            activeChapterIndex: 0,
+          })
+          return true
+        } catch {
+          return false
+        }
+      },
+
+      listLocalStories: async () => {
+        try {
+          const res = await apiListStories()
+          if (!res.ok) return []
+          const data = await res.json()
+          return data.stories || []
+        } catch {
+          return []
+        }
+      },
 
       saveToCloud: async (userId) => {
         const { story, chapters } = get()
         if (!story) return
         set({ isSyncing: true })
         try {
-          const batch = writeBatch(db)
-          const storyRef = doc(db, 'stories', story.id)
-          const firestoreStory: FirestoreStory = {
-            id: story.id,
-            userId,
-            title: story.title,
-            subtitle: story.subtitle,
-            scenarioId: story.scenarioId,
-            scenario: story.scenario,
-            createdAt: story.createdAt,
-            updatedAt: timestamp(),
-          }
-          batch.set(storyRef, firestoreStory, { merge: true })
+          const { useSettingsStore } = await import('../stores/settingsStore')
+          const { cloudTextBackup, cloudImageBackup } = useSettingsStore.getState().backup
 
-          for (const ch of chapters) {
-            const chapterRef = doc(db, 'stories', story.id, 'chapters', ch.id)
-            const firestoreChapter: FirestoreChapter = {
-              id: ch.id,
-              title: ch.title,
-              order: ch.order,
-              createdAt: ch.createdAt,
+          if (cloudTextBackup) {
+            const batch = writeBatch(db)
+            const storyRef = doc(db, 'stories', story.id)
+            const firestoreStory: FirestoreStory = {
+              id: story.id,
+              userId,
+              title: story.title,
+              subtitle: story.subtitle,
+              scenarioId: story.scenarioId,
+              scenario: story.scenario,
+              createdAt: story.createdAt,
               updatedAt: timestamp(),
-              paragraphs: ch.paragraphs,
             }
-            batch.set(chapterRef, firestoreChapter, { merge: true })
+            batch.set(storyRef, firestoreStory, { merge: true })
+
+            for (const ch of chapters) {
+              const chapterRef = doc(db, 'stories', story.id, 'chapters', ch.id)
+              const firestoreChapter: FirestoreChapter = {
+                id: ch.id,
+                title: ch.title,
+                order: ch.order,
+                createdAt: ch.createdAt,
+                updatedAt: timestamp(),
+                paragraphs: ch.paragraphs,
+              }
+              batch.set(chapterRef, firestoreChapter, { merge: true })
+            }
+
+            await batch.commit()
           }
 
-          await batch.commit()
+          if (cloudImageBackup) {
+            for (const ch of chapters) {
+              for (const p of ch.paragraphs) {
+                for (let i = 0; i < (p.images || []).length; i++) {
+                  const url = p.images[i]
+                  if (url && (url.startsWith('data:') || url.startsWith('blob:'))) {
+                    const imageRef = ref(storage, `images/${story.id}/${ch.id}/${p.id}_${i}.png`)
+                    await uploadString(imageRef, url, 'data_url')
+                    p.images[i] = await getDownloadURL(imageRef)
+                  }
+                }
+              }
+            }
+          }
+
           set({ isSyncing: false, story: { ...story, updatedAt: timestamp() } })
         } catch (err) {
           set({ isSyncing: false })
@@ -265,6 +468,11 @@ export const useStoryStore = create<StoryState>()(
     {
       name: 'nera-story',
       storage: idbStorage,
+      partialize: (state) => ({
+        story: state.story,
+        chapters: state.chapters,
+        activeChapterIndex: state.activeChapterIndex,
+      }),
     },
   ),
 )

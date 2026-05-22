@@ -1,13 +1,15 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { get, set } from 'idb-keyval'
-import type { LlmSettings, ImageSettings } from '../types/settings'
+import type { LlmSettings, ImageSettings, BackupSettings } from '../types/settings'
 
 interface SettingsState {
   llm: LlmSettings
   image: ImageSettings
+  backup: BackupSettings
   setLlm: (partial: Partial<LlmSettings>) => void
   setImage: (partial: Partial<ImageSettings>) => void
+  setBackup: (partial: Partial<BackupSettings>) => void
   reset: () => void
 }
 
@@ -19,7 +21,7 @@ const defaultLlm: LlmSettings = {
   apiKey: '',
   temperature: 0.9,
   maxTokens: 1500,
-  contextWindow: 3000,
+  contextWindow: 70000,
   systemPrompt: `You are a literary narrator writing an immersive isekai/fantasy novel. Write in third person past tense, vivid literary prose. Each response should be 2-4 short paragraphs. Do NOT include chapter titles or headers. Do NOT use markdown. Describe actions, sensations and dialogue naturally. When the player acts, write their action INTO the prose first, then continue the scene. Always end with an implicit or explicit hook that invites the reader's next action. Stay in the story world at all times.`,
 }
 
@@ -29,6 +31,12 @@ const defaultImage: ImageSettings = {
   cloudApiKey: '',
   model: 'flux',
   corsProxyUrl: '',
+  comfyWorkflow: '',
+}
+
+const defaultBackup: BackupSettings = {
+  cloudTextBackup: false,
+  cloudImageBackup: false,
 }
 
 const idbStorage = {
@@ -49,13 +57,20 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       llm: { ...defaultLlm },
       image: { ...defaultImage },
+      backup: { ...defaultBackup },
       setLlm: (partial) => set((s) => ({ llm: { ...s.llm, ...partial } })),
       setImage: (partial) => set((s) => ({ image: { ...s.image, ...partial } })),
-      reset: () => set({ llm: { ...defaultLlm }, image: { ...defaultImage } }),
+      setBackup: (partial) => set((s) => ({ backup: { ...s.backup, ...partial } })),
+      reset: () => set({ llm: { ...defaultLlm }, image: { ...defaultImage }, backup: { ...defaultBackup } }),
     }),
     {
       name: 'nera-settings',
       storage: idbStorage,
+      partialize: (state) => ({
+        llm: state.llm,
+        image: state.image,
+        backup: state.backup,
+      }),
     },
   ),
 )

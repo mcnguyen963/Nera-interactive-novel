@@ -13,16 +13,19 @@ interface UiState {
   imageModalTitle: string
   imageModalPrompt: string
   imageModalUrl: string | null
+  imageModalTargetChapterIndex: number
+  imageModalTargetParagraphIndex: number | null
   isGeneratingImage: boolean
 
   addToast: (message: string, type?: Toast['type']) => void
   removeToast: (id: string) => void
   openSettings: () => void
   closeSettings: () => void
-  openImageModal: (title: string, prompt: string, url?: string | null) => void
+  openImageModal: (title: string, prompt: string, url?: string | null, targetChapterIndex?: number, targetParagraphIndex?: number | null) => void
   closeImageModal: () => void
   setGeneratingImage: (val: boolean) => void
   setImageModalUrl: (url: string | null) => void
+  setImageModalPrompt: (prompt: string) => void
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -32,6 +35,8 @@ export const useUiStore = create<UiState>((set) => ({
   imageModalTitle: '',
   imageModalPrompt: '',
   imageModalUrl: null,
+  imageModalTargetChapterIndex: 0,
+  imageModalTargetParagraphIndex: null,
   isGeneratingImage: false,
 
   addToast: (message, type = 'info') => {
@@ -45,9 +50,10 @@ export const useUiStore = create<UiState>((set) => ({
   removeToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   openSettings: () => set({ showSettings: true }),
   closeSettings: () => set({ showSettings: false }),
-  openImageModal: (title, prompt, url = null) =>
-    set({ showImageModal: true, imageModalTitle: title, imageModalPrompt: prompt, imageModalUrl: url }),
-  closeImageModal: () => set({ showImageModal: false, imageModalUrl: null }),
+  openImageModal: (title, prompt, url = null, targetChapterIndex = 0, targetParagraphIndex = null) =>
+    set({ showImageModal: true, imageModalTitle: title, imageModalPrompt: prompt, imageModalUrl: url, imageModalTargetChapterIndex: targetChapterIndex, imageModalTargetParagraphIndex: targetParagraphIndex }),
+  closeImageModal: () => set({ showImageModal: false, imageModalUrl: null, imageModalTargetParagraphIndex: null }),
   setGeneratingImage: (val) => set({ isGeneratingImage: val }),
   setImageModalUrl: (url) => set({ imageModalUrl: url }),
+  setImageModalPrompt: (prompt) => set({ imageModalPrompt: prompt }),
 }))

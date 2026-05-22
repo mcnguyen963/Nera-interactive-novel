@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+/// <reference types="vitest/globals" />
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useUiStore } from './uiStore'
 
 describe('uiStore', () => {
@@ -96,6 +97,11 @@ describe('uiStore', () => {
     it('sets image modal url', () => {
       useUiStore.getState().setImageModalUrl('http://example.com/img.png')
       expect(useUiStore.getState().imageModalUrl).toBe('http://example.com/img.png')
+    })
+
+    it('sets image modal prompt', () => {
+      useUiStore.getState().setImageModalPrompt('A knight fighting a dragon')
+      expect(useUiStore.getState().imageModalPrompt).toBe('A knight fighting a dragon')
     })
   })
 })

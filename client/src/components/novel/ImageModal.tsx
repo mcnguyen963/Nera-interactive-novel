@@ -1,4 +1,5 @@
-import { useUiStore, useStoryStore } from '../../stores'
+import { useState } from 'react'
+import { useUiStore, useStoryStore, useSettingsStore } from '../../stores'
 import { generateImage } from '../../lib/edgeApi'
 import { Modal, Button, Spinner } from '../shared'
 
@@ -7,32 +8,44 @@ export function ImageModal() {
     showImageModal,
     imageModalTitle,
     imageModalPrompt,
-    imageModalUrl,
+    imageModalTargetChapterIndex,
+    imageModalTargetParagraphIndex,
     closeImageModal,
     isGeneratingImage,
     setGeneratingImage,
+    setImageModalPrompt,
     addToast,
   } = useUiStore()
+
+  const image = useSettingsStore((s) => s.image)
+  const llm = useSettingsStore((s) => s.llm)
+
+  const [generatedUrl, setGeneratedUrl] = useState<string | null>(null)
+  const [generatedDesc, setGeneratedDesc] = useState('')
 
   async function handleGenerate() {
     if (!imageModalPrompt) return
     setGeneratingImage(true)
+    setGeneratedUrl(null)
+    setGeneratedDesc('')
     try {
-      const res = await generateImage(imageModalPrompt, 'cloud', 'flux')
+      const res = await generateImage(imageModalPrompt, image.provider, image.model, llm.localUrl, llm.localModel, image.localUrl, image.comfyWorkflow)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      const imageUrl = data.data?.[0]?.url || data.images?.[0] || ''
+      if (data.error) throw new Error(data.error)
+      const imageUrl = data.url || ''
+      const description = data.description || ''
       if (imageUrl) {
-        const { addImageToParagraph } = useStoryStore.getState()
-        const { activeChapterIndex } = useStoryStore.getState()
-        const { setImageModalUrl } = useUiStore.getState()
-        setImageModalUrl(imageUrl)
-        const paras = useStoryStore.getState().chapters[activeChapterIndex]?.paragraphs
-        if (paras && paras.length > 0) {
-          addImageToParagraph(activeChapterIndex, paras.length - 1, imageUrl)
-        }
+        setGeneratedUrl(imageUrl)
+        setGeneratedDesc(description)
+      } else if (description) {
+        setGeneratedDesc(description)
       }
-      addToast('Image generated', 'success')
+      if (imageUrl || description) {
+        addToast('Image generated', 'success')
+      } else {
+        addToast('Nothing was generated — check your image provider settings', 'error')
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Image generation failed'
       addToast(msg, 'error')
@@ -40,6 +53,22 @@ export function ImageModal() {
       setGeneratingImage(false)
     }
   }
+
+  function handleAddToNovel() {
+    const { addImageToParagraph } = useStoryStore.getState()
+    const chapterIdx = imageModalTargetChapterIndex
+    const paras = useStoryStore.getState().chapters[chapterIdx]?.paragraphs
+    if (!paras || paras.length === 0) {
+      addToast('No paragraphs available to add image to', 'error')
+      return
+    }
+    const paraIdx = imageModalTargetParagraphIndex ?? paras.length - 1
+    addImageToParagraph(chapterIdx, paraIdx, generatedUrl || '', generatedDesc)
+    addToast('Image added to paragraph', 'success')
+    closeImageModal()
+  }
+
+  const hasResult = !!(generatedUrl || generatedDesc)
 
   return (
     <Modal open={showImageModal} onClose={closeImageModal} className="w-[560px]">
@@ -50,11 +79,13 @@ export function ImageModal() {
         <Button onClick={closeImageModal}>✕</Button>
       </div>
 
-      {imageModalPrompt && (
-        <div className="text-[0.85rem] text-[var(--ink2)] italic leading-[1.5] p-3 bg-[var(--bg)] rounded-[var(--r)] mb-3">
-          {imageModalPrompt}
-        </div>
-      )}
+      <textarea
+        className="w-full text-[0.85rem] text-[var(--ink2)] leading-[1.5] p-3 bg-[var(--bg)] rounded-[var(--r)] mb-3 border border-[var(--rule)] resize-y min-h-[4rem]"
+        value={imageModalPrompt}
+        onChange={(e) => setImageModalPrompt(e.target.value)}
+        placeholder="Enter an image generation prompt..."
+        rows={3}
+      />
 
       <div className="text-center text-[var(--ink3)] italic py-5">
         {isGeneratingImage ? (
@@ -62,8 +93,12 @@ export function ImageModal() {
             <Spinner />
             Generating…
           </div>
-        ) : imageModalUrl ? (
-          <img src={imageModalUrl} alt="Generated" className="w-full h-auto rounded-[var(--r)]" />
+        ) : generatedUrl ? (
+          <img src={generatedUrl} alt="Generated" className="w-full h-auto rounded-[var(--r)]" />
+        ) : generatedDesc ? (
+          <p className="text-[0.85rem] leading-[1.6] text-[var(--ink2)] not-italic">
+            {generatedDesc}
+          </p>
         ) : (
           'Click generate to create an image.'
         )}
@@ -73,6 +108,11 @@ export function ImageModal() {
         <Button onClick={handleGenerate} disabled={isGeneratingImage}>
           {isGeneratingImage ? 'Generating…' : 'Generate'}
         </Button>
+        {hasResult && (
+          <Button onClick={handleAddToNovel}>
+            Add to Novel
+          </Button>
+        )}
         <Button onClick={closeImageModal}>Close</Button>
       </div>
     </Modal>

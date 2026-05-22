@@ -7,8 +7,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "dist",
-    "rootDir": "api",
     "types": ["node"]
   },
-  "include": ["api"]
+  "include": ["api", "dev.ts"]
 }
