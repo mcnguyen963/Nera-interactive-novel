@@ -1,17 +1,32 @@
 # Draft Stories — Design Spec
 
-When a user navigates back from a novel to the homepage, the current story state is saved as a recoverable draft card.
+Drafts are **persistent resumable sessions**. Every story is continuously saved to IndexedDB as the user plays. When they navigate back to the homepage, their sessions are already there — no manual save trigger needed.
+
+## Core Concept
+
+- **Drafts = sessions.** A draft is created automatically when `createStory()` is called.
+- **Continuous sync.** Every paragraph addition, chapter change, or paragraph update automatically persists to IndexedDB.
+- **Multiple sessions.** A user can have many draft cards (different stories returned from at different times).
+- **No "save on exit" needed.** The draft is always up-to-date. Going back just reveals what's already saved.
 
 ## Data Flow
 
 ```
-NovelPage "← Back to stories"
+createStory()
         ↓
-  save draft to IndexedDB (story + chapters + activeChapterIndex)
+  auto-create draft in IndexedDB (empty chapters, no paragraphs)
+        ↓
+  user plays → paragraphs/chapters change
+        ↓
+  each change → auto-update draft in IndexedDB (background, silent)
+        ↓
+  user clicks "← Back to stories"
         ↓
   resetStory() → story = null
         ↓
-  navigate('/') → HomePage renders draft cards
+  navigate('/') → HomePage loads all drafts from IndexedDB
+        ↓
+  draft cards render — user can "Continue" any session
 ```
 
 ## Draft Storage
@@ -26,10 +41,10 @@ NovelPage "← Back to stories"
     story: Story;         // full Story object
     chapters: Chapter[];  // full chapters array
     activeChapterIndex: number;
-    savedAt: number;      // timestamp
+    savedAt: number;      // timestamp of last update
   }
   ```
-- **Persistence:** Auto-saves to IndexedDB on back navigation. Optional "Save to Cloud" pushes to Firestore.
+- **Persistence:** Always in sync with current story state. Optional "Save to Cloud" pushes to Firestore.
 
 ## HomePage Layout
 
@@ -103,9 +118,11 @@ New methods on `storyStore`:
 interface StoryState {
   // ... existing methods ...
 
-  // Save current story as a recoverable draft
-  saveDraft: () => Promise<void>
-  // Load draft data from IndexedDB
+  // Create a new draft entry in IndexedDB
+  createDraft: (storyId: string, story: Story, chapters: Chapter[]) => Promise<void>
+  // Update the draft in IndexedDB with current story state
+  syncDraft: () => void  // syncs — fire and forget, never throws
+  // Load all drafts from IndexedDB
   loadDrafts: () => Promise<Draft[]>
   // Restore a draft into the store and remove from drafts list
   restoreDraft: (draftId: string) => Promise<boolean>
@@ -114,13 +131,20 @@ interface StoryState {
 }
 ```
 
-**`saveDraft` behavior:**
-1. Check if `story` and `chapters` exist
+**`createDraft` behavior:**
+1. Create draft object from `storyId`, `story`, `chapters`, `activeChapterIndex`
 2. Fetch existing drafts from IndexedDB
-3. If a draft with same `id` exists, update it (replace with current state)
+3. If a draft with same `id` exists, update it
 4. Otherwise, prepend new draft to array
 5. Trim to max 20 entries
 6. Save back to IndexedDB
+
+**`syncDraft` behavior:**
+1. Check if `story` and `chapters` exist in store
+2. If no draft exists for this story, call `createDraft()`
+3. Otherwise, fetch drafts, find matching draft by `id`, update with current state
+4. Save back to IndexedDB
+5. **Fire-and-forget** — never throws, never blocks rendering
 
 **`restoreDraft` behavior:**
 1. Fetch draft from IndexedDB by `id`
@@ -149,9 +173,23 @@ interface StoryState {
 ## NovelPage Changes
 
 **`handleBack` behavior:**
-1. Call `storyStore.saveDraft()` — saves current story as draft
-2. Call `resetStory()` — clears store
-3. Call `navigate('/')` — goes to homepage
+1. Call `resetStory()` — clears store
+2. Call `navigate('/')` — goes to homepage
+
+(No save needed — draft is already synced in the background)
+
+## Auto-Sync Integration
+
+**Where `syncDraft` is called:**
+1. `createStory()` — after creating the story, call `createDraft()`
+2. `addParagraph()` — after adding a paragraph, call `syncDraft()`
+3. `updateParagraph()` — after updating a paragraph, call `syncDraft()`
+4. `deleteParagraph()` — after deleting a paragraph, call `syncDraft()`
+5. `addChapter()` — after adding a chapter, call `syncDraft()`
+6. `regenerateParagraph()` — after regeneration completes, call `syncDraft()`
+7. `setActiveChapter()` — after changing active chapter, call `syncDraft()`
+
+All calls are fire-and-forget (no `await`, no error handling needed). If IndexedDB write fails, the draft is stale but the user continues playing. Next sync will catch up.
 
 ## Cloud Save Integration
 
@@ -164,20 +202,22 @@ interface StoryState {
 
 | Case | Handling |
 |------|----------|
-| User creates new story, starts typing but doesn't go back | No draft created — only back navigation triggers save |
-| User continues a draft → creates new story → goes back | New story saved as draft, old draft removed (Continue already removed it) |
+| User creates story, plays, then closes browser without going back | Draft already synced to IndexedDB — session preserved |
+| User creates new story while another draft exists | New story gets its own draft entry; old draft card still shows in "Your Stories" |
+| User continues a draft → creates new story → goes back | New story saved as draft, old draft already removed by Continue |
 | User clicks "Continue" on same draft twice | Second click loads restored story (no draft exists anymore), behaves normally |
 | Cloud save fails | Toast notification, draft stays in IndexedDB |
 | Max 20 drafts reached | Oldest draft (by `savedAt`) auto-removed |
 | User logs out | Drafts stay in IndexedDB, "Save to Cloud" button hidden |
-| User has 0 paragraphs | Metadata shows "0 paragraphs", snippet area empty |
+| User has 0 paragraphs | Metadata shows "0 paragraphs", snippet shows "No paragraphs yet" |
+| IndexedDB sync fails mid-play | Draft is stale but user continues. Next sync catches up. No data loss. |
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
 | `client/src/types/story.ts` | Add `Draft` interface |
-| `client/src/stores/storyStore.ts` | Add `saveDraft`, `loadDrafts`, `restoreDraft`, `removeDraft` methods |
+| `client/src/stores/storyStore.ts` | Add `createDraft`, `syncDraft`, `loadDrafts`, `restoreDraft`, `removeDraft` methods; call `syncDraft` from all mutation methods |
 | `client/src/components/novel/DraftCard.tsx` | New component |
 | `client/src/pages/HomePage.tsx` | Add "Your Stories" section, render `DraftCard` components |
-| `client/src/pages/NovelPage.tsx` | Update `handleBack` to call `saveDraft()` |
+| `client/src/pages/NovelPage.tsx` | Update `handleBack` to just reset + navigate (no save) |
