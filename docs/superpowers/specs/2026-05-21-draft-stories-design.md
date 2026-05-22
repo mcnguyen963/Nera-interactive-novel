@@ -64,7 +64,7 @@ NovelPage "← Back to stories"
   1. **Title** — `story.title` (bold, accent color)
   2. **Subtitle** — `story.subtitle` (italic, ink3 color)
   3. **Metadata** — "Ch {N} · {M} paragraphs" (ink2 color, small font)
-  4. **Last paragraph snippet** — last 50 characters of last narrator paragraph (ink2 color, italic)
+  4. **Last paragraph snippet** — last 50 characters of last paragraph (any role), or "No paragraphs yet" if none exist (ink2 color, italic)
   5. **Buttons row** — "Save to Cloud", "Continue", "× Delete"
 
 ### Buttons
