@@ -1,49 +1,63 @@
 # Nera — Interactive Novel Engine
 
-Write immersive AI-powered interactive fiction with a real-time streaming chat interface, chapter management, and image generation.
-
-## Tech Stack
-
-- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS 4, Zustand
-- **Backend:** Edge function (Vercel/Netlify) for LLM/image proxying
-- **Database:** Firebase Auth + Firestore (free tier)
-- **Persistence:** IndexedDB via `idb-keyval` (local), Firestore (cloud save)
-- **Streaming:** Server-Sent Events (SSE) from edge function to client
+Write immersive AI-powered interactive fiction with streaming LLM narration, chapter management, and image generation.
 
 ## Features
 
-- 6 built-in scenarios: Isekai, Dungeon, Cyberpunk, Mythology, Romance, Custom
-- AI-powered story generation via OpenRouter (SSE streaming)
-- Chapter management with auto-naming (Roman numerals)
-- Editable paragraph blocks with inline delete
-- Image generation (local SD or OpenRouter)
-- Cloud save/load/delete via Firestore
-- Local IndexedDB persistence with Zustand
-- Firebase Auth: Email/password + Google sign-in + email verification
-- Dark-themed literary UI
+- **AI narration** — Streaming story generation via OpenRouter or local LLM (llama.cpp compatible)
+- **Action-driven** — Type what your character does; the LLM rewrites it into vivid prose
+- **6 built-in scenarios** — Isekai, Dungeon, Cyberpunk, Mythology, Romance, or Custom
+- **Chapter management** — Auto-named chapters (Roman numerals), editable titles
+- **Inline editing** — Double-click any paragraph to edit; full-block auto-resizing editor
+- **Paragraph actions** — Edit, regenerate (narrator only), add image, or delete per paragraph
+- **Image generation** — Generate illustrations via local SD WebUI / ComfyUI or OpenRouter
+- **Cloud save/load** — Firebase Firestore with per-user ownership; manual save/load workflow
+- **Local persistence** — All stories auto-saved to IndexedDB via Zustand + `idb-keyval`
+- **Auth** — Email/password + Google sign-in with email verification gating
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS 4 |
+| State | Zustand (persisted to IndexedDB) |
+| Backend | Edge function (Vercel/Netlify) — single `api/llm.ts` |
+| Auth & DB | Firebase Authentication + Firestore |
+| LLM API | OpenRouter (cloud) or local llama.cpp-compatible server |
+| Image API | OpenRouter or local SD WebUI / ComfyUI |
+| Streaming | Server-Sent Events (SSE) through edge function |
+
+## Architecture
+
+```
+┌─────────────────────┐     SSE stream      ┌──────────────────┐     HTTP      ┌────────────┐
+│  React (Vite) SPA   │ ◄────────────────── │  Edge Function   │ ◄─────────── │ OpenRouter │
+│  Zustand + IndexedDB│    /api/llm/chat    │  api/llm.ts      │              │ or Local   │
+│  Firebase Auth SDK  │                     │  Auth validation  │              │ LLM/Image  │
+└─────────────────────┘                     └──────────────────┘              └────────────┘
+```
+
+- **Context system:** Scenario fields (setting, companion, player, hook) + recent paragraph history are assembled into a structured key-value context window and appended to the system prompt
+- **No raw user text displayed:** User actions are sent to the LLM to be rewritten into narrative prose; only the narrator's output appears in the story
+- **Manual cloud persistence:** Cloud save/load is explicit — stories are not auto-synced to Firestore
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- A Firebase project (Auth + Firestore — free tier)
-- An OpenRouter API key (or local image gen endpoint)
+- A Firebase project (Auth + Firestore — free tier is sufficient)
+- An OpenRouter API key (or local LLM endpoint)
 
 ### Setup
 
 ```sh
-# Clone the repo
-cd nera-interactive-novel/client
-
-# Install dependencies
+cd client
 npm install
-
-# Configure environment
 cp .env.example .env
 ```
 
-Edit `.env` with your Firebase project credentials:
+Fill in your Firebase project credentials in `.env`:
 
 | Variable | Description |
 |----------|-------------|
@@ -57,17 +71,20 @@ Edit `.env` with your Firebase project credentials:
 ### Run locally
 
 ```sh
+# Start both client dev server and edge function
 npm run dev
 ```
 
-### Deploy edge function (Vercel)
+This runs the Vite dev server on `localhost:5173` and the edge function on `localhost:8787`.
+
+### Deploy edge function
 
 ```sh
 npm install -g vercel
 vercel --prod
 ```
 
-Set these environment variables in your Vercel dashboard:
+Set these variables in Vercel:
 
 | Variable | Description |
 |----------|-------------|
@@ -76,42 +93,64 @@ Set these environment variables in your Vercel dashboard:
 | `FIREBASE_CLIENT_EMAIL` | Firebase service account client email |
 | `FIREBASE_PRIVATE_KEY` | Firebase service account private key |
 
-### Testing
+## Usage
 
-```sh
-npm test          # Run tests
-npm run test:coverage  # Run tests with coverage
-```
+1. **Sign in** — Email/password or Google
+2. **Pick a scenario** — Choose from 6 premade settings or create your own
+3. **Write your action** — Describe what your character does in the input box
+4. **Continue** — Press Enter or click Continue; the LLM weaves your action into the story
+5. **Send empty** — Press Continue with no input to advance the story without an explicit action
+6. **Edit** — Double-click any paragraph to edit it inline
+7. **Regenerate** — Hover a narrator paragraph and click "regen" for an alternate version
+8. **Save** — Use the header controls to save/load locally or to the cloud
 
 ## Project Structure
 
 ```
 nera-interactive-novel/
-├── client/              # Vite + React app
+├── client/                      # Vite + React SPA
 │   ├── src/
-│   │   ├── components/  # UI components (auth, layout, novel, shared)
-│   │   ├── lib/         # Firebase init, edge API client, utilities
-│   │   ├── pages/       # HomePage (scenario picker), NovelPage
-│   │   ├── scenarios/   # 6 built-in story scenarios
-│   │   ├── stores/      # Zustand stores (auth, settings, story, ui)
-│   │   └── types/       # TypeScript type definitions
+│   │   ├── components/
+│   │   │   ├── auth/            # Login, register, password reset
+│   │   │   ├── layout/          # Header, Sidebar, InputArea
+│   │   │   ├── novel/           # ParagraphBlock, ChapterDivider, ImageModal, SettingsModal
+│   │   │   └── shared/          # Button, Modal, Spinner, TextArea, Toast
+│   │   ├── lib/                 # Firebase init, edge API client, utilities
+│   │   ├── pages/               # HomePage (scenario picker), NovelPage
+│   │   ├── scenarios/           # Built-in scenario definitions
+│   │   ├── stores/              # Zustand stores (auth, settings, story, ui)
+│   │   └── types/               # TypeScript type definitions
 │   └── vitest.config.ts
 ├── functions/
-│   └── api/llm.ts       # Edge function (chat, models, image)
-├── firestore.rules      # Firestore security rules
-└── package.json
+│   └── api/llm.ts               # Edge function: chat streaming, models, image gen, story CRUD
+├── firestore.rules              # Firestore security rules
+└── package.json                 # Root orchestration (concurrently runs client + functions)
 ```
 
-## Architecture
+## Configuration
 
-- **Firebase-first:** Auth and Firestore handled directly via browser SDKs
-- **Single edge function:** Proxies LLM chat (SSE streaming) and image generation through OpenRouter
-- **Zustand + IndexedDB:** All state persisted locally; cloud save is explicit (manual save/load)
-- **KV context system:** Scenario fields + recent paragraphs assembled into structured context for LLM
+### LLM Settings
+
+Configure via the Settings modal (gear icon): provider (OpenRouter or local), model, temperature, max tokens, context window size, and system prompt.
+
+### Image Generation
+
+Supports local Stable Diffusion WebUI, ComfyUI (with CORS proxy), or OpenRouter image models. Configure the endpoint URL and authentication in Settings.
+
+## Testing
+
+```sh
+npm test               # Run tests
+npm run test:coverage  # Run tests with coverage
+```
 
 ## Security
 
-- Firestore rules enforce ownership (`request.auth.uid == resource.data.userId`)
-- Email verification required for API access (`request.auth.token.email_verified`)
-- Edge function validates Firebase ID tokens before proxying requests
-- Rate limiting (20 requests/min per user) on edge function
+- Firestore rules enforce story ownership (`request.auth.uid == resource.data.userId`)
+- Email verification required before API access
+- Edge function validates Firebase ID tokens on every request
+- Rate-limited to 20 requests/min per user
+
+## License
+
+MIT
