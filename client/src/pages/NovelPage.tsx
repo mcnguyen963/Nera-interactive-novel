@@ -1,12 +1,15 @@
 import { useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useStoryStore } from '../stores'
 import { ChapterDivider } from '../components/novel/ChapterDivider'
 import { ParagraphBlock } from '../components/novel/ParagraphBlock'
+import { InputArea } from '../components/layout'
 import { Spinner } from '../components/shared'
 
 export function NovelPage() {
-  const { story, chapters, activeChapterIndex, isGenerating } = useStoryStore()
+  const { story, chapters, activeChapterIndex, isGenerating, resetStory } = useStoryStore()
   const bodyRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (bodyRef.current) {
@@ -14,10 +17,21 @@ export function NovelPage() {
     }
   }, [chapters])
 
+  function handleBack() {
+    resetStory()
+    navigate('/')
+  }
+
   if (!story) return null
 
   return (
-    <div className="flex-1 py-12 px-12 max-w-[700px]" ref={bodyRef}>
+    <div className="flex-1 py-12 px-12 max-w-[70vw]" ref={bodyRef}>
+      <button
+        onClick={handleBack}
+        className="text-[0.78rem] text-[var(--ink3)] hover:text-[var(--accent)] transition-colors mb-6 tracking-[0.08em]"
+      >
+        ← Back to stories
+      </button>
       <h1 className="font-[var(--font-head)] text-[1.5rem] tracking-[0.1em] text-[var(--accent)] text-center mb-1.5">
         {story.title}
       </h1>
@@ -53,6 +67,7 @@ export function NovelPage() {
           )}
         </div>
       ))}
+      <InputArea />
     </div>
   )
 }

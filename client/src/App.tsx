@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore, useStoryStore } from './stores'
 import { AuthPage } from './components/auth'
-import { Header, Sidebar, InputArea } from './components/layout'
+import { Header, Sidebar } from './components/layout'
 import { SettingsModal, ImageModal } from './components/novel'
 import { Toast } from './components/shared'
 import { HomePage, NovelPage } from './pages'
@@ -18,7 +18,6 @@ function NovelLayout() {
         <Sidebar />
         <NovelPage />
       </div>
-      <InputArea />
     </>
   )
 }

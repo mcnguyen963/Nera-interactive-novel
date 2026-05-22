@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useState, useMemo, type KeyboardEvent } from 'react'
 import { useStoryStore, useSettingsStore, useUiStore } from '../../stores'
 import { streamLlmChat } from '../../lib/edgeApi'
 import { buildKVContext } from '../../lib/utils'
@@ -12,17 +12,23 @@ export function InputArea() {
 
   async function handleSend() {
     const raw = input.trim()
-    if (!raw || !story || isGenerating) return
+    if (!story || isGenerating) return
     setInput('')
 
-    addParagraph(activeChapterIndex, raw, 'player')
-
     const allParas = chapters.flatMap((c) => c.paragraphs)
-    const kvCtx = buildKVContext(story.scenario, allParas.slice(-llm.contextWindow))
+    const kvCtx = buildKVContext(story.scenario, allParas, llm.contextWindow)
     const fullSystem = llm.systemPrompt + '\n\n## Story Context (Key-Value)\n' + kvCtx
+
+    let userMessage: string
+    if (raw) {
+      userMessage = `Rewrite the following action as vivid story narrative and continue the story naturally, weaving it into the prose: "${raw}"\n\nWrite the next paragraphs of the story.`
+    } else {
+      userMessage = `Continue the story naturally, writing the next paragraphs of the narrative.`
+    }
+
     const messages = [
       { role: 'system', content: fullSystem },
-      { role: 'user', content: `My action: ${raw}. Write the next paragraphs of the story.` },
+      { role: 'user', content: userMessage },
     ]
 
     setGenerating(true)
@@ -36,6 +42,7 @@ export function InputArea() {
           model: llm.provider === 'openrouter' ? llm.openrouterModel : llm.localModel,
           temperature: llm.temperature,
           maxTokens: llm.maxTokens,
+          localUrl: llm.localUrl,
         },
         (chunk) => {
           if (!fullText && chunk.trim()) {
@@ -69,25 +76,37 @@ export function InputArea() {
     }
   }
 
+  const ctxSize = useMemo(() => {
+    if (!story) return 0
+    const paras = chapters.flatMap((c) => c.paragraphs)
+    const kv = buildKVContext(story.scenario, paras, llm.contextWindow)
+    return (llm.systemPrompt + '\n\n## Story Context (Key-Value)\n' + kv).length
+  }, [story, chapters, llm.systemPrompt, llm.contextWindow])
+
   if (!story) return null
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-[var(--bg)] via-[var(--bg)_28%] to-transparent pb-5 pt-7 flex justify-center z-40">
-      <div className="w-full max-w-[600px] bg-[var(--page)] border border-[var(--rule)] rounded-md p-3 flex flex-col gap-2 shadow-[0_2px_16px_rgba(0,0,0,0.08)]">
+    <div className="mt-10 pb-4">
+      <div className="bg-[var(--page)] border border-[var(--rule)] rounded-md p-3 flex flex-col gap-2 shadow-[0_2px_16px_rgba(0,0,0,0.08)]">
         <TextArea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKey}
-          placeholder="What do you do…"
+          placeholder={isGenerating ? 'Writing…' : 'What do you do…'}
           rows={1}
           disabled={isGenerating}
         />
         <div className="flex items-center justify-between">
-          <span className="text-[0.75rem] text-[var(--ink3)]">
-            Enter to send · Shift+Enter for new line
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-[0.75rem] text-[var(--ink3)]">
+              Enter to send · Shift+Enter for new line
+            </span>
+            <span className="text-[0.7rem] text-[var(--ink3)] opacity-50">
+              ~{Math.round(ctxSize / 4).toLocaleString()} tokens
+            </span>
+          </div>
           <div className="flex gap-1.5">
-            <Button variant="primary" onClick={handleSend} disabled={isGenerating || !input.trim()}>
+            <Button variant="primary" onClick={handleSend} disabled={isGenerating}>
               {isGenerating ? '…' : 'Continue →'}
             </Button>
           </div>
