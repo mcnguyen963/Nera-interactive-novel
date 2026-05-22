@@ -5,6 +5,7 @@ export interface Paragraph {
   text: string;
   role: ParaRole;
   images: string[];
+  imageDescriptions: string[];
   order: number;
 }
 
@@ -44,4 +45,12 @@ export interface ScenarioDef {
   char: string;
   hook: string;
   player: string;
+}
+
+export interface Draft {
+  id: string;
+  story: Story;
+  chapters: Chapter[];
+  activeChapterIndex: number;
+  savedAt: number;
 }
