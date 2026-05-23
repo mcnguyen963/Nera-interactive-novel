@@ -145,6 +145,18 @@ export function HomePage() {
         </h2>
         <div className="flex flex-col gap-1.5 mb-3.5">
           <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">
+            World Name
+          </label>
+          <input
+            value={userWorldName}
+            onChange={(e) => setUserWorldName(e.target.value)}
+            placeholder="Give your world a name..."
+            className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5 mb-3.5">
+          <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">
             Your Story Setting
           </label>
           <textarea
