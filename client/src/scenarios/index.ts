@@ -2,6 +2,16 @@ import type { ScenarioDef } from '../types/story';
 
 export const SCENARIOS: ScenarioDef[] = [
   {
+    id: 'custom',
+    title: 'Custom World',
+    sub: 'Start from a blank page',
+    tag: 'Custom',
+    setting: 'A blank canvas for your imagination to fill with wonders and adventures.',
+    char: 'A mysterious guide or companion of your choosing',
+    hook: 'Your adventure begins exactly as you envision it.',
+    player: 'The protagonist of your own unique story',
+  },
+  {
     id: 'isekai',
     title: 'Isekai Transit',
     sub: 'A stranger in a world of swords and sorcery',
@@ -50,15 +60,5 @@ export const SCENARIOS: ScenarioDef[] = [
     char: 'Lord Caelion — third son of a rival house, dangerously charming, hiding a secret.',
     hook: 'An invitation arrives sealed in black wax. The masquerade ball is tonight.',
     player: "Merchant's child given a hollow title and tasked with unmasking a traitor.",
-  },
-  {
-    id: 'custom',
-    title: 'Custom World',
-    sub: 'Start from a blank page',
-    tag: 'Custom',
-    setting: '',
-    char: '',
-    hook: '',
-    player: '',
   },
 ];

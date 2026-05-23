@@ -11,8 +11,8 @@ import {
   query,
   orderBy,
 } from 'firebase/firestore'
-import { ref, uploadString, getDownloadURL } from 'firebase/storage'
-import { db, storage } from '../lib/firebase'
+import { ref, uploadString, getDownloadURL, deleteObject, listAll } from 'firebase/storage'
+import { db, storage, auth } from '../lib/firebase'
 import { generateId, timestamp, buildKVContext } from '../lib/utils'
 import { streamLlmChat, saveStory as apiSaveStory, loadStory as apiLoadStory, listStories as apiListStories } from '../lib/edgeApi'
 import type { Story, Chapter, Paragraph, Scenario, Draft } from '../types/story'
@@ -300,6 +300,9 @@ export const useStoryStore = create<StoryState>()(
               temperature: llm.temperature,
               maxTokens: llm.maxTokens,
               localUrl: llm.localUrl,
+              apiKey: llm.apiKey,
+              customUrl: llm.customUrl,
+              customApiKey: llm.customApiKey,
             },
             (chunk) => {
               fullText += chunk
@@ -452,7 +455,38 @@ export const useStoryStore = create<StoryState>()(
       },
 
       deleteFromCloud: async (storyId) => {
-        await deleteDoc(doc(db, 'stories', storyId))
+        try {
+          await deleteDoc(doc(db, 'stories', storyId))
+        } catch {
+          // continue to clean up other data even if Firestore delete fails
+        }
+
+        try {
+          const imagesRef = ref(storage, `images/${storyId}`)
+          const user = auth.currentUser
+          if (user) {
+            const imageList = await listAll(imagesRef)
+            const deletePromises = imageList.items.map((itemRef) => deleteObject(itemRef))
+            await Promise.allSettled(deletePromises)
+          }
+        } catch {
+          // continue even if image deletion fails
+        }
+
+        try {
+          const { deleteStory: deleteStoryApi } = await import('../lib/edgeApi')
+          await deleteStoryApi(storyId).catch(() => {})
+        } catch {
+          // continue even if local delete fails
+        }
+
+        try {
+          const existing: Draft[] = (await idbGet(DRAFTS_KEY)) || []
+          await idbSet(DRAFTS_KEY, existing.filter((d) => d.id !== storyId))
+        } catch {
+          // continue even if draft removal fails
+        }
+
         set({ story: null, chapters: [], activeChapterIndex: 0 })
       },
 

@@ -89,7 +89,7 @@ async function verifyRequest(request: Request, env: Env): Promise<{ uid: string 
 
 async function handleChat(request: Request, env: Env): Promise<Response> {
   const body = await request.json().catch(() => ({}))
-  const { messages, provider, model, temperature, maxTokens } = body
+  const { messages, provider, model, temperature, maxTokens, apiKey } = body
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return new Response(JSON.stringify({ error: 'Messages array is required' }), {
@@ -105,14 +105,18 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
 
   if (provider === 'openrouter') {
     apiUrl = `${OPENROUTER_BASE}/chat/completions`
-    apiHeaders['Authorization'] = `Bearer ${env.OPENROUTER_API_KEY}`
+    apiHeaders['Authorization'] = `Bearer ${apiKey || env.OPENROUTER_API_KEY}`
+  } else if (provider === 'custom') {
+    const baseUrl = ((body as any).customUrl || '').replace(/\/+$/, '')
+    apiUrl = `${baseUrl}/chat/completions`
+    apiHeaders['Authorization'] = `Bearer ${(body as any).customApiKey || apiKey}`
   } else {
     const baseUrl = ((body as any).localUrl || 'http://localhost:8080').replace(/\/+$/, '')
     apiUrl = `${baseUrl}/chat/completions`
   }
 
   const apiBody: Record<string, unknown> = {
-    model: model || 'openai/gpt-4o-mini',
+    model: model || 'openai/gpt-oss-120b:free',
     messages,
     temperature: temperature ?? 0.9,
     max_tokens: maxTokens ?? 1500,
@@ -140,6 +144,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       try {
         const reader = apiRes.body!.getReader()
         let buffer = ''
+        let allLines: string[] = []
 
         while (true) {
           const { done, value } = await reader.read()
@@ -148,35 +153,45 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
           buffer += decoder.decode(value, { stream: true })
           const lines = buffer.split('\n')
           buffer = lines.pop() || ''
+          allLines.push(...lines)
+        }
 
-          for (const line of lines) {
-            const trimmed = line.trim()
-            if (!trimmed || !trimmed.startsWith('data: ')) continue
-            const data = trimmed.slice(6)
-            if (data === '[DONE]') continue
+        // Keep the last incomplete line too
+        if (buffer.trim()) allLines.push(buffer.trim())
 
-            try {
-              const parsed = JSON.parse(data)
-              const text = parsed.choices?.[0]?.delta?.content || ''
-              if (text) {
-                controller.enqueue(encoder.encode(`event: message\ndata: ${JSON.stringify({ text })}\n\n`))
-              }
-            } catch {
-              // skip unparseable chunks
+        // Try parsing as SSE streaming first
+        let foundText = false
+        for (const line of allLines) {
+          const trimmed = line.trim()
+          if (!trimmed || !trimmed.startsWith('data: ')) continue
+          const data = trimmed.slice(6)
+          if (data === '[DONE]') continue
+
+          try {
+            const parsed = JSON.parse(data)
+            const text = parsed.choices?.[0]?.delta?.content || ''
+            if (text) {
+              foundText = true
+              controller.enqueue(encoder.encode(`event: message\ndata: ${JSON.stringify({ text })}\n\n`))
             }
+          } catch {
+            // skip unparseable chunks
           }
         }
 
-        // If no SSE text found, try as non-streaming JSON
-        const rest = buffer.trim()
-        if (rest) {
-          try {
-            const parsed = JSON.parse(rest)
-            const text = parsed.choices?.[0]?.message?.content || parsed.error?.message || ''
-            if (text) {
-              controller.enqueue(encoder.encode(`event: message\ndata: ${JSON.stringify({ text })}\n\n`))
-            }
-          } catch { /* skip */ }
+        // If no SSE text found, try the entire response as non-streaming JSON
+        if (!foundText) {
+          const full = allLines.join('\n').trim()
+          if (full) {
+            try {
+              const parsed = JSON.parse(full)
+              const errorMsg = typeof parsed.error === 'string' ? parsed.error : parsed.error?.message
+              const text = parsed.choices?.[0]?.message?.content || errorMsg || ''
+              if (text) {
+                controller.enqueue(encoder.encode(`event: message\ndata: ${JSON.stringify({ text })}\n\n`))
+              }
+            } catch { /* skip */ }
+          }
         }
 
         controller.enqueue(encoder.encode('event: done\ndata: {"complete": true}\n\n'))
@@ -198,9 +213,90 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   })
 }
 
-async function handleModels(_request: Request, env: Env): Promise<Response> {
+async function handleSimpleChat(request: Request, env: Env): Promise<Response> {
+  const body = await request.json().catch(() => ({}))
+  const { messages, provider, model, temperature, maxTokens, apiKey } = body
+
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return new Response(JSON.stringify({ error: 'Messages array is required' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const apiHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+
+  let apiUrls: string[]
+  if (provider === 'openrouter') {
+    apiUrls = [`${OPENROUTER_BASE}/chat/completions`]
+    apiHeaders['Authorization'] = `Bearer ${apiKey || env.OPENROUTER_API_KEY}`
+  } else if (provider === 'custom') {
+    const baseUrl = ((body as any).customUrl || '').replace(/\/+$/, '')
+    apiUrls = [`${baseUrl}/v1/chat/completions`, `${baseUrl}/chat/completions`]
+    apiHeaders['Authorization'] = `Bearer ${(body as any).customApiKey || apiKey}`
+  } else {
+    const baseUrl = ((body as any).localUrl || 'http://localhost:8080').replace(/\/+$/, '')
+    apiUrls = [`${baseUrl}/v1/chat/completions`, `${baseUrl}/chat/completions`]
+  }
+
+  const apiBody: Record<string, unknown> = {
+    model: model || 'openai/gpt-oss-120b:free',
+    messages,
+    temperature: temperature ?? 0.9,
+    stream: false,
+  }
+  if (maxTokens) apiBody['max_tokens'] = maxTokens
+
+  let text = ''
+  let lastError = ''
+  let debugRaw = ''
+  for (const apiUrl of apiUrls) {
+    try {
+      const apiRes = await fetch(apiUrl, {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify(apiBody),
+      })
+      if (apiRes.ok) {
+        const rawText = await apiRes.text()
+        debugRaw = rawText.slice(0, 1000)
+        try {
+          const data = JSON.parse(rawText)
+          text = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || data.response || data.content || data.message?.content || ''
+          if (text) break
+        } catch { /* skip */ }
+      } else {
+        const errText = await apiRes.text().catch(() => '') || `HTTP ${apiRes.status}`
+        lastError = errText
+      }
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e)
+    }
+  }
+
+  if (!text && lastError) {
+    return new Response(JSON.stringify({ error: `LLM API: ${lastError.slice(0, 200)}` }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  if (!text && debugRaw) {
+    return new Response(JSON.stringify({ text: '', debug: debugRaw.slice(0, 500) }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  return new Response(JSON.stringify({ text }), {
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+async function handleModels(request: Request, env: Env): Promise<Response> {
+  const body = await request.json().catch(() => ({}))
+  const { apiKey } = body
   const res = await fetch(`${OPENROUTER_BASE}/models`, {
-    headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}` },
+    headers: { Authorization: `Bearer ${apiKey || env.OPENROUTER_API_KEY}` },
   })
   if (!res.ok) {
     return new Response(JSON.stringify({ error: 'Failed to fetch models' }), {
@@ -297,7 +393,7 @@ async function serveImageFile(filename: string): Promise<Response> {
 
 async function handleImage(request: Request, env: Env): Promise<Response> {
   const body = await request.json().catch(() => ({}))
-  const { prompt, provider, model, llmUrl, llmModel, imageUrl: bodyImageUrl, comfyWorkflow } = body
+  const { prompt, provider, model, llmUrl, llmModel, imageUrl: bodyImageUrl, comfyWorkflow, apiKey } = body
 
   if (!prompt) {
     return new Response(JSON.stringify({ error: 'Prompt is required' }), {
@@ -333,16 +429,17 @@ async function handleImage(request: Request, env: Env): Promise<Response> {
 
   if (provider === 'cloud') {
     let description = ''
-    if (env.OPENROUTER_API_KEY) {
+    const cloudKey = apiKey || env.OPENROUTER_API_KEY
+    if (cloudKey) {
       try {
         const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+            Authorization: `Bearer ${cloudKey}`,
           },
           body: JSON.stringify({
-            model: model || 'openai/gpt-4o-mini',
+            model: model || 'openai/gpt-oss-120b:free',
             messages: [{ role: 'user', content: `Describe the scene in 1-2 sentences based on: ${prompt}` }],
             max_tokens: 200,
           }),
@@ -752,6 +849,9 @@ export default {
       switch (path) {
         case '/api/llm/chat':
           response = await handleChat(request, env)
+          break
+        case '/api/llm/simple-chat':
+          response = await handleSimpleChat(request, env)
           break
         case '/api/llm/models':
           response = await handleModels(request, env)

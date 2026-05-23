@@ -18,6 +18,8 @@ const defaultLlm: LlmSettings = {
   localUrl: 'http://192.168.8.124:8080',
   localModel: 'local-model',
   openrouterModel: '',
+  customUrl: '',
+  customApiKey: '',
   apiKey: '',
   temperature: 0.9,
   maxTokens: 1500,

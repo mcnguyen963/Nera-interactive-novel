@@ -43,6 +43,9 @@ export function InputArea() {
           temperature: llm.temperature,
           maxTokens: llm.maxTokens,
           localUrl: llm.localUrl,
+          apiKey: llm.apiKey,
+          customUrl: llm.customUrl,
+          customApiKey: llm.customApiKey,
         },
         (chunk) => {
           if (!fullText && chunk.trim()) {

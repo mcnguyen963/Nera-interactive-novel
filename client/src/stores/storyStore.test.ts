@@ -25,8 +25,21 @@ vi.mock('firebase/firestore', async (importOriginal) => {
   }
 })
 
+vi.mock('firebase/storage', async (importOriginal) => {
+  const actual = await importOriginal() as any
+  return {
+    ...actual,
+    ref: vi.fn(),
+    uploadString: vi.fn(),
+    getDownloadURL: vi.fn(),
+    deleteObject: vi.fn(async () => {}),
+    listAll: vi.fn(async () => ({ items: [] })),
+  }
+})
+
 vi.mock('../lib/firebase', () => ({
   db: {},
+  storage: {},
 }))
 
 import { useStoryStore } from './storyStore'

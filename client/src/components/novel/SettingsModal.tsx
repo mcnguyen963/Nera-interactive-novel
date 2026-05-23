@@ -13,7 +13,7 @@ export function SettingsModal() {
   async function handleFetchModels() {
     setLoadingModels(true)
     try {
-      const list = await fetchEdgeModels()
+      const list = await fetchEdgeModels(llm.apiKey)
       setModels(list.filter((m) => !m.id.includes('embed')).sort((a, b) => a.id.localeCompare(b.id)))
     } catch {
       setModels([])
@@ -34,7 +34,7 @@ export function SettingsModal() {
   if (!showSettings) return null
 
   return (
-    <Modal open={showSettings} onClose={closeSettings} className="w-[520px]">
+    <Modal open={showSettings} onClose={closeSettings} className="w-[70vw]">
       <div className="font-[var(--font-head)] text-[0.9rem] tracking-[0.15em] text-[var(--accent)] border-b border-[var(--rule)] pb-2.5 mb-2">
         Server & Generation Settings
       </div>
@@ -52,6 +52,7 @@ export function SettingsModal() {
         >
           <option value="local">Local (llama.cpp compatible)</option>
           <option value="openrouter">Cloud (OpenRouter)</option>
+          <option value="custom">Custom (OpenAI-compatible API)</option>
         </select>
       </div>
 
@@ -105,6 +106,39 @@ export function SettingsModal() {
               value={llm.apiKey}
               onChange={(e) => setLlm({ apiKey: e.target.value })}
               placeholder="sk-… or your OpenRouter key"
+              className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
+            />
+          </div>
+        </>
+      )}
+
+      {llm.provider === 'custom' && (
+        <>
+          <div className="flex flex-col gap-1.5 mt-2">
+            <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">API Base URL</label>
+            <input
+              value={llm.customUrl}
+              onChange={(e) => setLlm({ customUrl: e.target.value })}
+              placeholder="https://api.example.com/v1"
+              className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5 mt-2">
+            <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">API Key</label>
+            <input
+              type="password"
+              value={llm.customApiKey}
+              onChange={(e) => setLlm({ customApiKey: e.target.value })}
+              placeholder="sk-… or your API key"
+              className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5 mt-2">
+            <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">Model</label>
+            <input
+              value={llm.localModel}
+              onChange={(e) => setLlm({ localModel: e.target.value })}
+              placeholder="e.g. gpt-4, mistral-large"
               className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
             />
           </div>

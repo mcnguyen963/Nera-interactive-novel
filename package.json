@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "concurrently -n edge,client -c yellow,cyan \"cd functions && npm run dev\" \"cd client && npm run dev\"",
     "build": "cd client && npm run build",
+    "test": "cd client && npm test",
     "dev:edge": "cd functions && npm run dev",
     "deploy:edge": "cd functions && npm run deploy",
     "deploy:firebase": "firebase deploy --only firestore:rules,storage:rules"

@@ -29,13 +29,13 @@ describe('SCENARIOS', () => {
     expect(new Set(titles).size).toBe(titles.length)
   })
 
-  it('includes custom scenario with empty fields', () => {
+  it('includes custom scenario with default values', () => {
     const custom = SCENARIOS.find((s) => s.id === 'custom')
     expect(custom).toBeDefined()
-    expect(custom!.setting).toBe('')
-    expect(custom!.char).toBe('')
-    expect(custom!.hook).toBe('')
-    expect(custom!.player).toBe('')
+    expect(custom!.setting).toBeTruthy()
+    expect(custom!.char).toBeTruthy()
+    expect(custom!.hook).toBeTruthy()
+    expect(custom!.player).toBeTruthy()
   })
 
   it('non-custom scenarios have non-empty setting and player', () => {

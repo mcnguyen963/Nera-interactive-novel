@@ -1,10 +1,12 @@
-export type LlmProvider = 'local' | 'openrouter';
+export type LlmProvider = 'local' | 'openrouter' | 'custom';
 
 export interface LlmSettings {
   provider: LlmProvider;
   localUrl: string;
   localModel: string;
   openrouterModel: string;
+  customUrl: string;
+  customApiKey: string;
   apiKey: string;
   temperature: number;
   maxTokens: number;

@@ -66,7 +66,7 @@ export default function App() {
           path="/"
           element={
             <AuthGuard>
-              {story ? <Navigate to="/novel" replace /> : <Dashboard />}
+              <Dashboard />
             </AuthGuard>
           }
         />
