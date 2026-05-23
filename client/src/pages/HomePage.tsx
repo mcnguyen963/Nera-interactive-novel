@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SCENARIOS } from '../scenarios'
 import { useAuthStore, useStoryStore } from '../stores'
-import { Button } from '../components/shared'
+import { Button, Modal } from '../components/shared'
 import { DraftCard } from '../components/novel'
 import type { ScenarioDef, Draft } from '../types/story'
+import { generateId } from '../lib/utils'
 
 export function HomePage() {
   const [selected, setSelected] = useState<ScenarioDef | null>(null)
@@ -12,9 +13,10 @@ export function HomePage() {
   const [userChar, setUserChar] = useState('')
   const [userRole, setUserRole] = useState('')
   const [userHook, setUserHook] = useState('')
+  const [userWorldName, setUserWorldName] = useState('')
   const { user } = useAuthStore()
   const navigate = useNavigate()
-  const { createStory, restoreDraft, saveToCloud, removeDraft, loadDrafts } = useStoryStore()
+  const { restoreDraft, saveToCloud, removeDraft, loadDrafts } = useStoryStore()
   const [drafts, setDrafts] = useState<Draft[]>([])
 
   useEffect(() => {
@@ -23,6 +25,7 @@ export function HomePage() {
 
   function handleSelect(s: ScenarioDef) {
     setSelected(s)
+    setUserWorldName(s.title || '')
     setUserSetting(s.setting || '')
     setUserChar(s.char || '')
     setUserRole(s.player || '')
@@ -31,19 +34,39 @@ export function HomePage() {
 
   function handleBegin() {
     if (!selected || !user) return
-    const scenarioDef = {
-      setting: userSetting || selected.setting || 'A mysterious fantasy world.',
-      companion: userChar || selected.char || 'A mysterious guide.',
-      player: userRole || selected.player || 'A traveller seeking answers.',
-      hook: userHook || selected.hook || 'The adventure begins.',
-    }
-    createStory({
-      title: selected.title,
-      subtitle: selected.sub,
-      scenarioId: selected.id,
-      scenario: scenarioDef,
-      userId: user.uid,
+    
+    const now = Date.now()
+    const storyId = generateId()
+    
+    useStoryStore.setState({
+      story: {
+        id: storyId,
+        userId: user.uid,
+        title: userWorldName || selected.title,
+        subtitle: selected.sub,
+        scenarioId: selected.id,
+        scenario: {
+          setting: userSetting || selected.setting || 'A mysterious fantasy world.',
+          companion: userChar || selected.char || 'A mysterious guide.',
+          player: userRole || selected.player || 'A traveller seeking answers.',
+          hook: userHook || selected.hook || 'The adventure begins.',
+        },
+        createdAt: now,
+        updatedAt: now,
+      },
+      chapters: [{
+        id: generateId(),
+        title: 'Chapter I',
+        order: 0,
+        createdAt: now,
+        updatedAt: now,
+        paragraphs: [],
+      }],
+      activeChapterIndex: 0,
     })
+    
+    useStoryStore.getState().syncDraft()
+    navigate('/novel')
   }
 
   async function handleContinue(draftId: string) {
@@ -74,7 +97,27 @@ export function HomePage() {
         Choose your world · then craft your setting
       </p>
 
-      <div className="w-full max-w-[800px] mb-8">
+      {drafts.length > 0 && (
+      <div className="w-[80vw] mb-8">
+          <hr className="border-[var(--rule)] mb-6" />
+          <h2 className="font-[var(--font-head)] text-[1rem] tracking-[0.12em] text-[var(--accent)] mb-4">
+            Your Stories
+          </h2>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+            {drafts.map((d) => (
+              <DraftCard
+                key={d.id}
+                draft={d}
+                onContinue={handleContinue}
+                onSaveToCloud={handleSaveToCloud}
+                onDelete={handleDeleteDraft}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+    <div className="w-[80vw] mb-8">
         <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 w-full">
           {SCENARIOS.map((s) => (
             <div
@@ -96,88 +139,67 @@ export function HomePage() {
         </div>
       </div>
 
-      {drafts.length > 0 && (
-        <div className="w-full max-w-[800px] mb-8">
-          <hr className="border-[var(--rule)] mb-6" />
-          <h2 className="font-[var(--font-head)] text-[1rem] tracking-[0.12em] text-[var(--accent)] mb-4">
-            Your Stories
-          </h2>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-            {drafts.map((d) => (
-              <DraftCard
-                key={d.id}
-                draft={d}
-                onContinue={handleContinue}
-                onSaveToCloud={handleSaveToCloud}
-                onDelete={handleDeleteDraft}
-              />
-            ))}
-          </div>
+      <Modal open={!!selected} onClose={() => setSelected(null)} className="w-[60vw]">
+        <h2 className="font-[var(--font-head)] text-[1.1rem] text-[var(--accent)] mb-4 tracking-[0.08em]">
+          {selected?.title}
+        </h2>
+        <div className="flex flex-col gap-1.5 mb-3.5">
+          <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">
+            Your Story Setting
+          </label>
+          <textarea
+            value={userSetting}
+            onChange={(e) => setUserSetting(e.target.value)}
+            rows={5}
+            placeholder={selected?.id === 'custom' ? 'Describe your world - the setting, time period, mood, and key elements that make it unique...' : 'Add extra details to the scenario setting...'}
+            className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none resize-y min-h-[80px] leading-[1.55] focus:border-[var(--accent)]"
+          />
         </div>
-      )}
 
-      {selected && (
-        <div className="w-full max-w-[800px] mt-6 bg-[var(--page)] border border-[var(--rule)] rounded-md p-6">
-          <div className="flex flex-col gap-1.5 mb-3.5">
+        <div className="grid grid-cols-2 gap-3 mb-3.5">
+          <div className="flex flex-col gap-1.5">
             <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">
-              Your Story Setting
+              Main Companion / NPC
             </label>
-            <textarea
-              value={userSetting}
-              onChange={(e) => setUserSetting(e.target.value)}
-              rows={5}
-              placeholder={selected.id === 'custom' ? 'Describe your world from scratch…' : 'Add extra details to the scenario setting…'}
-              className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none resize-y min-h-[80px] leading-[1.55] focus:border-[var(--accent)]"
+            <input
+              value={userChar}
+              onChange={(e) => setUserChar(e.target.value)}
+              placeholder={selected?.id === 'custom' ? 'Who will guide or accompany you in this world? Give them personality and background...' : 'Name and description'}
+              className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
             />
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">
-                Main Companion / NPC
-              </label>
-              <input
-                value={userChar}
-                onChange={(e) => setUserChar(e.target.value)}
-                placeholder="Name and description"
-                className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">
-                Your Role / Character
-              </label>
-              <input
-                value={userRole}
-                onChange={(e) => setUserRole(e.target.value)}
-                placeholder="Who you are in this world"
-                className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
-              />
-            </div>
-          </div>
-
-          <div className="mt-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">
-                Opening Hook
-              </label>
-              <input
-                value={userHook}
-                onChange={(e) => setUserHook(e.target.value)}
-                placeholder="e.g. You wake in a unfamiliar place…"
-                className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-2.5 items-center mt-4">
-            <Button variant="primary" onClick={handleBegin} className="px-6 py-2 text-[0.95rem]">
-              ✨ Begin Novel
-            </Button>
-            <Button onClick={() => setSelected(null)}>Clear selection</Button>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">
+              Your Role / Character
+            </label>
+            <input
+              value={userRole}
+              onChange={(e) => setUserRole(e.target.value)}
+              placeholder={selected?.id === 'custom' ? 'Who are you in this world? What is your role, background, and special qualities...' : 'Who you are in this world'}
+              className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
+            />
           </div>
         </div>
-      )}
+
+        <div className="flex flex-col gap-1.5 mb-4">
+          <label className="text-[0.78rem] text-[var(--ink3)] font-[var(--font-head)] tracking-[0.08em]">
+            Opening Hook
+          </label>
+          <input
+            value={userHook}
+            onChange={(e) => setUserHook(e.target.value)}
+            placeholder={selected?.id === 'custom' ? 'How does your adventure begin? What is the inciting incident that kicks off your story...' : 'e.g. You wake in a unfamiliar place…'}
+            className="bg-[var(--bg)] border border-[var(--rule)] text-[var(--ink)] rounded-[var(--r)] p-[7px_11px] font-[var(--font-body)] text-[0.9rem] outline-none focus:border-[var(--accent)]"
+          />
+        </div>
+
+        <div className="flex gap-2.5 items-center">
+          <Button variant="primary" onClick={handleBegin} className="px-6 py-2 text-[0.95rem]">
+            ✨ Begin Novel
+          </Button>
+          <Button onClick={() => setSelected(null)}>Cancel</Button>
+        </div>
+      </Modal>
     </div>
   )
 }
