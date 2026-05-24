@@ -61,6 +61,7 @@ vi.mock('./components/layout', () => ({
 vi.mock('./components/novel', () => ({
   SettingsModal: () => <div data-testid="settings-modal">SettingsModal Mock</div>,
   ImageModal: () => <div data-testid="image-modal">ImageModal Mock</div>,
+  AccountSettingsModal: () => <div data-testid="account-settings-modal">AccountSettingsModal Mock</div>,
 }))
 
 vi.mock('./components/shared', () => ({
