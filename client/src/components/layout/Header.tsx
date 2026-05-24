@@ -4,7 +4,7 @@ import { Button } from '../shared'
 export function Header() {
   const { user, profile, logout } = useAuthStore()
   const { story, saveToCloud, loadFromCloud, deleteFromCloud, listCloudStories, isSyncing } = useStoryStore()
-  const { addToast, openSettings } = useUiStore()
+  const { addToast, openSettings, openAccountSettings } = useUiStore()
 
   async function handleSave() {
     if (!user || !story) return
@@ -68,6 +68,13 @@ export function Header() {
           title="Settings"
         >
           ⚙
+        </button>
+        <button
+          onClick={openAccountSettings}
+          className="text-[var(--ink3)] hover:text-[var(--accent)] transition-colors text-[1.3rem] leading-none mx-1 px-1"
+          title="Account"
+        >
+          👤
         </button>
         {profile && (
           <span className="text-[0.75rem] text-[var(--ink3)] ml-2">

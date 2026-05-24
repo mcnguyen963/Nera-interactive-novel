@@ -8,6 +8,10 @@ import {
   sendEmailVerification,
   GoogleAuthProvider,
   signInWithPopup,
+  updateEmail,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   type User,
 } from 'firebase/auth'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
@@ -27,6 +31,8 @@ interface AuthState {
   resetPassword: (email: string) => Promise<void>
   signInWithGoogle: () => Promise<void>
   refreshProfile: () => Promise<void>
+  changeEmail: (newEmail: string, currentPassword: string) => Promise<void>
+  changePassword: (newPassword: string, currentPassword: string) => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -110,5 +116,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (docSnap.exists()) {
       set({ profile: docSnap.data() as UserProfile })
     }
+  },
+
+  changeEmail: async (newEmail, currentPassword) => {
+    const { user, profile } = get()
+    if (!user) return
+    const cred = EmailAuthProvider.credential(user.email || '', currentPassword)
+    await reauthenticateWithCredential(user, cred)
+    await updateEmail(user, newEmail)
+    if (profile) {
+      set({ profile: { ...profile, email: newEmail } })
+    }
+  },
+
+  changePassword: async (newPassword, currentPassword) => {
+    const { user } = get()
+    if (!user) return
+    const cred = EmailAuthProvider.credential(user.email || '', currentPassword)
+    await reauthenticateWithCredential(user, cred)
+    await updatePassword(user, newPassword)
   },
 }))

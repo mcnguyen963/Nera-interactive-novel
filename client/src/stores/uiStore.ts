@@ -9,6 +9,7 @@ interface Toast {
 interface UiState {
   toasts: Toast[]
   showSettings: boolean
+  showAccountSettings: boolean
   showImageModal: boolean
   imageModalTitle: string
   imageModalPrompt: string
@@ -21,6 +22,8 @@ interface UiState {
   removeToast: (id: string) => void
   openSettings: () => void
   closeSettings: () => void
+  openAccountSettings: () => void
+  closeAccountSettings: () => void
   openImageModal: (title: string, prompt: string, url?: string | null, targetChapterIndex?: number, targetParagraphIndex?: number | null) => void
   closeImageModal: () => void
   setGeneratingImage: (val: boolean) => void
@@ -31,6 +34,7 @@ interface UiState {
 export const useUiStore = create<UiState>((set) => ({
   toasts: [],
   showSettings: false,
+  showAccountSettings: false,
   showImageModal: false,
   imageModalTitle: '',
   imageModalPrompt: '',
@@ -50,6 +54,8 @@ export const useUiStore = create<UiState>((set) => ({
   removeToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   openSettings: () => set({ showSettings: true }),
   closeSettings: () => set({ showSettings: false }),
+  openAccountSettings: () => set({ showAccountSettings: true }),
+  closeAccountSettings: () => set({ showAccountSettings: false }),
   openImageModal: (title, prompt, url = null, targetChapterIndex = 0, targetParagraphIndex = null) =>
     set({ showImageModal: true, imageModalTitle: title, imageModalPrompt: prompt, imageModalUrl: url, imageModalTargetChapterIndex: targetChapterIndex, imageModalTargetParagraphIndex: targetParagraphIndex }),
   closeImageModal: () => set({ showImageModal: false, imageModalUrl: null, imageModalTargetParagraphIndex: null }),

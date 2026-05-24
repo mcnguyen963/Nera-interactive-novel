@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore, useStoryStore } from './stores'
 import { AuthPage } from './components/auth'
 import { Header, Sidebar } from './components/layout'
-import { SettingsModal, ImageModal } from './components/novel'
+import { SettingsModal, ImageModal, AccountSettingsModal } from './components/novel'
 import { Toast } from './components/shared'
 import { HomePage, NovelPage } from './pages'
 
@@ -12,6 +12,7 @@ function NovelLayout() {
     <>
       <Header />
       <SettingsModal />
+      <AccountSettingsModal />
       <ImageModal />
       <Toast />
       <div className="flex flex-1 max-w-[1100px] mx-auto w-full">
@@ -27,6 +28,7 @@ function Dashboard() {
     <>
       <Header />
       <SettingsModal />
+      <AccountSettingsModal />
       <ImageModal />
       <Toast />
       <HomePage />
