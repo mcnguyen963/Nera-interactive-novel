@@ -52,28 +52,28 @@ jobs:
       - name: Run tests
         run: npm test
 
-  deploy:
-    needs: [test-client, test-functions]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v4
+  # deploy:
+  #   needs: [test-client, test-functions]
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 20
 
-      - name: Install client dependencies
-        working-directory: ./client
-        run: npm ci
+  #     - name: Install client dependencies
+  #       working-directory: ./client
+  #       run: npm ci
 
-      - name: Build client
-        working-directory: ./client
-        run: npm run build
+  #     - name: Build client
+  #       working-directory: ./client
+  #       run: npm run build
 
-      - name: Deploy to Firebase
-        uses: FirebaseExtended/action-firebase-deploy@v0
-        with:
-          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
-          googleCredentials: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+  #     - name: Deploy to Firebase
+  #       uses: FirebaseExtended/action-firebase-deploy@v0
+  #       with:
+  #         projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+  #         googleCredentials: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
