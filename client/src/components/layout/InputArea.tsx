@@ -6,7 +6,7 @@ import { Button, TextArea } from '../shared'
 
 export function InputArea() {
   const [input, setInput] = useState('')
-  const { story, chapters, activeChapterIndex, isGenerating, addParagraph, setGenerating } = useStoryStore()
+  const { story, chapters, activeChapterIndex, isGenerating, isSummarizing, addParagraph, setGenerating, generateChapterSummary } = useStoryStore()
   const llm = useSettingsStore((s) => s.llm)
   const addToast = useUiStore((s) => s.addToast)
 
@@ -17,7 +17,10 @@ export function InputArea() {
 
     const allParas = chapters.flatMap((c) => c.paragraphs)
     const kvCtx = buildKVContext(story.scenario, allParas, llm.contextWindow)
-    const fullSystem = llm.systemPrompt + '\n\n## Story Context (Key-Value)\n' + kvCtx
+    let fullSystem = llm.systemPrompt + '\n\n## Story Context (Key-Value)\n' + kvCtx
+    if (story.previousChapterSummary && activeChapterIndex >= 1) {
+      fullSystem += '\n\n## Previous Chapters Summary\n' + story.previousChapterSummary
+    }
 
     let userMessage: string
     if (raw) {
@@ -107,6 +110,16 @@ export function InputArea() {
             <span className="text-[0.7rem] text-[var(--ink3)] opacity-50">
               ~{Math.round(ctxSize / 4).toLocaleString()} tokens
             </span>
+            {activeChapterIndex >= 1 && (
+              <Button
+                variant="secondary"
+                onClick={() => generateChapterSummary()}
+                disabled={isSummarizing || isGenerating}
+                className="text-[0.7rem] px-2 py-1"
+              >
+                {isSummarizing ? 'Summarizing…' : 'Summarize Previous Chapters'}
+              </Button>
+            )}
           </div>
           <div className="flex gap-1.5">
             <Button variant="primary" onClick={handleSend} disabled={isGenerating}>

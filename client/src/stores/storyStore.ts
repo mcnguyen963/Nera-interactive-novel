@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore'
 import { ref, uploadString, getDownloadURL, deleteObject, listAll } from 'firebase/storage'
 import { db, storage, auth } from '../lib/firebase'
-import { generateId, timestamp, buildKVContext } from '../lib/utils'
+import { generateId, timestamp, buildKVContext, buildPreviousChaptersContext } from '../lib/utils'
 import { streamLlmChat, saveStory as apiSaveStory, loadStory as apiLoadStory, listStories as apiListStories } from '../lib/edgeApi'
 import type { Story, Chapter, Paragraph, Scenario, Draft } from '../types/story'
 import type { FirestoreStory, FirestoreChapter } from '../types/firebase'
@@ -38,6 +38,7 @@ interface StoryState {
   chapters: Chapter[]
   activeChapterIndex: number
   isGenerating: boolean
+  isSummarizing: boolean
   isSyncing: boolean
   regeneratingParagraphId: string | null
 
@@ -51,6 +52,7 @@ interface StoryState {
   updateStory: (partial: Partial<Story>) => void
   setActiveChapter: (index: number) => void
   addChapter: () => void
+  generateChapterSummary: () => Promise<void>
   addParagraph: (chapterIndex: number, text: string, role: 'narrator' | 'player') => Paragraph
   updateParagraph: (chapterIndex: number, paragraphIndex: number, text: string) => void
   deleteParagraph: (chapterIndex: number, paragraphIndex: number) => void
@@ -80,8 +82,9 @@ export const useStoryStore = create<StoryState>()(
       story: null,
       chapters: [],
       activeChapterIndex: 0,
-      isGenerating: false,
-      isSyncing: false,
+isGenerating: false,
+  isSummarizing: false,
+  isSyncing: false,
       regeneratingParagraphId: null,
 
       createStory: ({ title, subtitle, scenarioId, scenario, userId }) => {
@@ -133,6 +136,75 @@ export const useStoryStore = create<StoryState>()(
         }
         set({ chapters: [...chapters, chapter], activeChapterIndex: chapters.length })
         get().syncDraft()
+        // auto-generate summary when transitioning to chapter 2+
+        if (chapters.length >= 1) {
+          get().generateChapterSummary()
+        }
+      },
+
+      generateChapterSummary: async () => {
+        const { story, chapters, activeChapterIndex } = get()
+        if (!story || activeChapterIndex < 1) return
+
+        set({ isSummarizing: true })
+        const prevChapters = chapters.slice(0, activeChapterIndex)
+        const prevText = buildPreviousChaptersContext(prevChapters)
+        if (!prevText) {
+          set({ isSummarizing: false })
+          return
+        }
+
+        const { useSettingsStore } = await import('../stores/settingsStore')
+        const llm = useSettingsStore.getState().llm
+
+        const summaryPrompt = `You are a story summarizer. Read the previous chapters of this story and produce a concise, detailed summary that captures:
+- Key plot events and developments
+- Character actions and decisions
+- Important dialogue or revelations
+- Current situation and setting
+
+Write in third person past tense, matching the story's narrative style. Keep it detailed enough to maintain full continuity.
+
+--- PREVIOUS CHAPTERS ---
+${prevText}
+
+--- SUMMARY ---`
+
+        const messages = [
+          { role: 'system', content: summaryPrompt },
+        ]
+
+        let fullSummary = ''
+        try {
+          await streamLlmChat(
+            {
+              messages,
+              provider: llm.provider,
+              model: llm.provider === 'openrouter' ? llm.openrouterModel : llm.localModel,
+              temperature: llm.temperature,
+              maxTokens: llm.maxTokens,
+              localUrl: llm.localUrl,
+              apiKey: llm.apiKey,
+              customUrl: llm.customUrl,
+              customApiKey: llm.customApiKey,
+            },
+            (chunk) => {
+              fullSummary += chunk
+            },
+          )
+          if (fullSummary.trim()) {
+            set({
+              story: story ? { ...story, previousChapterSummary: fullSummary.trim(), updatedAt: timestamp() } : null,
+              isSummarizing: false,
+            })
+            get().syncDraft()
+          } else {
+            set({ isSummarizing: false })
+          }
+        } catch {
+          set({ isSummarizing: false })
+          // summary generation failed — keep existing summary
+        }
       },
 
       addParagraph: (chapterIndex, text, role) => {

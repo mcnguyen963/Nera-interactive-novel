@@ -31,3 +31,23 @@ export function buildKVContext(
     .map(([k, v]) => `[${k}]\n${v}`)
     .join('\n\n')
 }
+
+export function buildPreviousChaptersContext(
+  chapters: { title: string; paragraphs: { text: string; role: string }[] }[],
+  maxChars: number = 15000,
+): string {
+  let allText = ''
+  for (let i = 0; i < chapters.length; i++) {
+    const ch = chapters[i]
+    allText += `\n--- ${ch.title} ---\n`
+    for (const para of ch.paragraphs) {
+      if (para.text.trim()) {
+        allText += para.text + '\n'
+      }
+    }
+  }
+  if (allText.length > maxChars) {
+    allText = allText.slice(0, maxChars)
+  }
+  return allText.trim()
+}

@@ -34,6 +34,7 @@ export interface Story {
   scenario: Scenario;
   createdAt: number;
   updatedAt: number;
+  previousChapterSummary?: string;
 }
 
 export interface ScenarioDef {
