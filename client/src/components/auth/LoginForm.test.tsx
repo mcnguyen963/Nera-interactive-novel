@@ -103,7 +103,7 @@ describe('LoginForm', () => {
     await userEvent.type(emailInput, 'a@a.com')
     await userEvent.type(passwordInput, 'pass')
 
-    const btn = screen.getByRole('button', { name: 'Sign In' })
+    const btn = screen.getByRole('button', { name: 'Sign In' }) as HTMLButtonElement
     expect(btn.disabled).toBe(false)
 
     fireEvent.click(btn)

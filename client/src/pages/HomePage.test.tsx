@@ -1,13 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
-import type { Draft } from '../types/story'
 
 const mock = vi.hoisted(() => ({
   navigate: vi.fn(),
-  restoreDraft: vi.fn<[string], Promise<boolean>>().mockResolvedValue(true),
+  restoreDraft: vi.fn().mockResolvedValue(true),
   saveToCloud: vi.fn(),
   removeDraft: vi.fn(),
-  loadDrafts: vi.fn<[], Promise<any[]>>().mockResolvedValue([]),
+  loadDrafts: vi.fn().mockResolvedValue([]),
   syncDraft: vi.fn(),
   storySetState: vi.fn(),
   storyGetState: vi.fn(() => ({ syncDraft: mock.syncDraft })),

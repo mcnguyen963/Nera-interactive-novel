@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 const memMap = vi.hoisted(() => new Map<string, unknown>())
+const mockFetchModels = vi.hoisted(() => vi.fn())
+const mockTestConnection = vi.hoisted(() => vi.fn())
 
 vi.mock('idb-keyval', () => ({
   get: vi.fn(async (key: string) => memMap.get(key)),
@@ -10,8 +12,8 @@ vi.mock('idb-keyval', () => ({
 }))
 
 vi.mock('../../lib/edgeApi', () => ({
-  fetchModels: vi.fn(),
-  testConnection: vi.fn(),
+  fetchModels: mockFetchModels,
+  testConnection: mockTestConnection,
 }))
 
 // Reactive Zustand-like store mock
@@ -33,7 +35,7 @@ const mockLlmState = vi.hoisted(() => ({
 
 const mockImageState = vi.hoisted(() => ({
   value: {
-    provider: 'local' as const,
+    provider: 'local' as string,
     localUrl: 'http://localhost:7860',
     cloudApiKey: '',
     model: 'flux',
@@ -85,7 +87,7 @@ vi.mock('../../stores', () => {
     setBackup: mockSetBackupFn,
     reset: vi.fn(),
   }))
-  useSettingsStore.subscribe = (cb: () => void) => {
+  ;(useSettingsStore as any).subscribe = (cb: () => void) => {
     s.llmSubscribers.push(cb)
     return () => { const i = s.llmSubscribers.indexOf(cb); if (i >= 0) s.llmSubscribers.splice(i, 1) }
   }
@@ -120,81 +122,6 @@ vi.mock('../../lib/utils', () => ({
 }))
 
 import { SettingsModal } from './SettingsModal'
-import { fetchModels, testConnection } from '../../lib/edgeApi'
-import { useSettingsStore, useUiStore } from '../../stores'
-
-const mockFetchModels = vi.mocked(fetchModels)
-const mockTestConnection = vi.mocked(testConnection)
-
-function getDefaultLlm(overrides?: Record<string, unknown>) {
-  return {
-    provider: 'openrouter',
-    localUrl: 'http://192.168.8.124:8080',
-    localModel: 'local-model',
-    openrouterModel: '',
-    customUrl: '',
-    customApiKey: '',
-    apiKey: '',
-    temperature: 0.9,
-    maxTokens: 1500,
-    contextWindow: 70000,
-    systemPrompt: 'default prompt',
-    ...overrides,
-  }
-}
-
-function getDefaultImage() {
-  return {
-    provider: 'local' as const,
-    localUrl: 'http://localhost:7860',
-    cloudApiKey: '',
-    model: 'flux',
-    corsProxyUrl: '',
-    comfyWorkflow: '',
-  }
-}
-
-function getDefaultBackup() {
-  return {
-    cloudTextBackup: false,
-    cloudImageBackup: false,
-  }
-}
-
-function getDefaultSettings() {
-  return {
-    llm: getDefaultLlm(),
-    image: getDefaultImage(),
-    backup: getDefaultBackup(),
-    setLlm: mockSetLlmFn,
-    setImage: mockSetImageFn,
-    setBackup: mockSetBackupFn,
-    reset: vi.fn(),
-  }
-}
-
-function getDefaultUi() {
-  return {
-    showSettings: true,
-    openSettings: vi.fn(),
-    closeSettings: mockCloseSettings,
-    toasts: [],
-    addToast: vi.fn(),
-    removeToast: vi.fn(),
-    showImageModal: false,
-    openImageModal: vi.fn(),
-    closeImageModal: vi.fn(),
-    imageModalTitle: '',
-    imageModalPrompt: '',
-    imageModalUrl: null,
-    imageModalTargetChapterIndex: 0,
-    imageModalTargetParagraphIndex: null,
-    isGeneratingImage: false,
-    setGeneratingImage: vi.fn(),
-    setImageModalUrl: vi.fn(),
-    setImageModalPrompt: vi.fn(),
-  }
-}
 
 // Helper: find input by label text - label and input are siblings within a wrapper div
 function getInputByLabel(container: HTMLElement, labelText: string): HTMLElement {
@@ -209,13 +136,13 @@ function getInputByLabel(container: HTMLElement, labelText: string): HTMLElement
   const parent = labelEl.parentElement
   if (parent) {
     const input = parent.querySelector('input, select, textarea')
-    if (input) return input
+    if (input) return input as HTMLElement
   }
   // Fallback: search the next sibling element
   let next = labelEl.nextElementSibling
   while (next) {
     if (next.tagName === 'INPUT' || next.tagName === 'SELECT' || next.tagName === 'TEXTAREA') {
-      return next
+      return next as HTMLElement
     }
     next = next.nextElementSibling
   }
@@ -241,7 +168,7 @@ describe('SettingsModal', () => {
       systemPrompt: 'default prompt',
     })
     Object.assign(mockImageState.value, {
-      provider: 'local' as const,
+    provider: 'local' as string,
       localUrl: 'http://localhost:7860',
       cloudApiKey: '',
       model: 'flux',

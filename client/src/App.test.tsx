@@ -154,9 +154,7 @@ describe('App', () => {
     mockAuthStore.initialized = true
     mockAuthStore.user = { uid: 'test-user' }
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    mockAuthStore.initialize = vi.fn(() => {
-      return () => {}
-    })
+    mockAuthStore.initialize = vi.fn(() => vi.fn())
     render(<App />)
     expect(screen.getByTestId('home-page')).toBeDefined()
     expect(screen.getByTestId('toast')).toBeDefined()

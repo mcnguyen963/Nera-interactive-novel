@@ -93,7 +93,7 @@ describe('ForgotPasswordForm', () => {
 
     await userEvent.type(emailInput, 'user@example.com')
 
-    const btn = screen.getByRole('button', { name: 'Send Reset Email' })
+    const btn = screen.getByRole('button', { name: 'Send Reset Email' }) as HTMLButtonElement
     expect(btn.disabled).toBe(false)
 
     fireEvent.click(btn)

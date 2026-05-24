@@ -311,10 +311,10 @@ describe('InputArea', () => {
 
       render(<InputArea />)
 
-      const sendBtn = screen.getByRole('button', { name: /\u2026/i })
+      const sendBtn = screen.getByRole('button', { name: /\u2026/i }) as HTMLButtonElement
       expect(sendBtn.disabled).toBe(true)
 
-      const textarea = screen.getByRole('textbox')
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
       expect(textarea.disabled).toBe(true)
     })
 
@@ -354,7 +354,7 @@ describe('InputArea', () => {
 
       render(<InputArea />)
 
-      const sendBtn = screen.getByRole('button', { name: /\u2026/i })
+      const sendBtn = screen.getByRole('button', { name: /\u2026/i }) as HTMLButtonElement
       expect(sendBtn.disabled).toBe(true)
     })
 

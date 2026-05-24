@@ -126,7 +126,7 @@ import App from './App'
 function setAuthenticated() {
   mockCurrentUser.current = { uid: 'test-uid', email: 'test@test.com' }
   useAuthStore.setState({
-    user: { uid: 'test-uid', email: 'test@test.com' },
+    user: { uid: 'test-uid', email: 'test@test.com' } as any,
     profile: { email: 'test@test.com', emailVerified: true, createdAt: Date.now(), updatedAt: Date.now() },
     loading: false,
     initialized: true,
@@ -405,7 +405,6 @@ describe('Scenario 3: Settings Flow', () => {
     })
 
     // Change temperature
-    const tempSlider = screen.getByRole('slider')
     await user.tab() // focus the slider
     // Set temperature via store directly for precision
     useSettingsStore.getState().setLlm({ temperature: 0.5, maxTokens: 2000 })
@@ -532,7 +531,7 @@ describe('Scenario 5: Image Generation', () => {
 
     // Find "add image" button on the paragraph
     const paragraphText = screen.getByText(/crystal city shimmered/i)
-    const paragraphContainer = paragraphText.closest('.group')!
+    const paragraphContainer = paragraphText.closest('.group') as HTMLElement
 
     // The action buttons are within this container but are absolutely positioned
     // We can find them by text since they're always in DOM
